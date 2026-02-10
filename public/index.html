@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MONOPOLY EMPIRE</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TOAST                                       -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SCREEN 1: LANDING                           -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div id="screen-landing" class="screen active">
+    <div class="bg-effects">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
+    <div class="landing-container">
+      <div class="landing-header">
+        <span class="crown-icon">♛</span>
+        <h1 class="landing-title">MONOPOLY EMPIRE</h1>
+        <p class="landing-subtitle">Build your empire. Crush your rivals.</p>
+      </div>
+
+      <div class="landing-card">
+        <div class="input-group">
+          <label for="input-name">Your Name</label>
+          <input type="text" id="input-name" placeholder="Enter your name" maxlength="20" autocomplete="off">
+        </div>
+
+        <button id="btn-create" class="btn btn-primary">Create Room</button>
+
+        <div class="divider">
+          <span>OR</span>
+        </div>
+
+        <div class="input-group">
+          <label for="input-code">Room Code</label>
+          <input type="text" id="input-code" placeholder="Enter room code" maxlength="6" autocomplete="off">
+        </div>
+
+        <button id="btn-join" class="btn btn-secondary">Join Room</button>
+
+        <p id="landing-error" class="error-text"></p>
+      </div>
+
+      <footer class="landing-footer">
+        <span id="connection-dot" class="connection-dot"></span>
+        <span id="connection-label" class="connection-label">Connecting...</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SCREEN 2: WAITING ROOM                      -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div id="screen-waiting" class="screen">
+    <div class="bg-effects">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
+    <div class="waiting-container">
+      <div class="room-code-header">
+        <h2>Room Code</h2>
+        <div class="room-code-box">
+          <span id="room-code-display">------</span>
+          <button id="btn-copy-code" class="btn btn-icon" title="Copy code">📋</button>
+        </div>
+      </div>
+
+      <div class="player-list-card">
+        <div class="player-list-header">
+          <h3>Players</h3>
+          <span id="player-count-badge" class="badge">0/6</span>
+        </div>
+        <ul id="player-list"></ul>
+      </div>
+
+      <p id="waiting-status" class="waiting-status">Waiting for players to join...</p>
+
+      <button id="btn-start-game" class="btn btn-primary btn-large" style="display:none;">Start Game</button>
+      <p id="waiting-for-host" class="waiting-for-host" style="display:none;">Waiting for host to start the game...</p>
+
+      <button id="btn-leave-room" class="btn btn-danger">Leave Room</button>
+
+      <div class="chat-panel">
+        <h4>Chat</h4>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input type="text" id="input-chat" placeholder="Type a message..." maxlength="200" autocomplete="off">
+          <button id="btn-send-chat" class="btn btn-icon">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SCREEN 3: GAME                              -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div id="screen-game" class="screen">
+    <div class="game-layout">
+
+      <!-- ══════════════ THE BOARD ══════════════ -->
+      <div id="board" class="board">
+
+        <!-- ─── CORNERS ─── -->
+        <div class="space corner corner-bl" data-pos="0" id="space-0">
+          <div class="corner-content">
+            <span class="corner-label-top">COLLECT $200</span>
+            <span class="corner-big">GO</span>
+            <span class="corner-arrow">→</span>
+          </div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space corner corner-br" data-pos="10" id="space-10">
+          <div class="corner-content">
+            <span class="corner-label-top">JUST</span>
+            <span class="corner-big">JAIL</span>
+            <span class="corner-label-bottom">VISITING</span>
+          </div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space corner corner-tr" data-pos="20" id="space-20">
+          <div class="corner-content">
+            <span class="corner-label-top">FREE</span>
+            <span class="corner-big">🅿️</span>
+            <span class="corner-label-bottom">PARKING</span>
+          </div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space corner corner-tl" data-pos="30" id="space-30">
+          <div class="corner-content">
+            <span class="corner-label-top">GO TO</span>
+            <span class="corner-big">🚔</span>
+            <span class="corner-label-bottom">JAIL</span>
+          </div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ─── BOTTOM ROW (pos 1–9) ─── -->
+        <div class="space bottom property" data-pos="1" id="space-1">
+          <div class="color-band" style="background:var(--prop-brown)"></div>
+          <div class="space-name">Mediterranean Ave</div>
+          <div class="space-price">$60</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom special" data-pos="2" id="space-2">
+          <div class="space-icon">🃏</div>
+          <div class="space-name">Community Chest</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom property" data-pos="3" id="space-3">
+          <div class="color-band" style="background:var(--prop-brown)"></div>
+          <div class="space-name">Baltic Ave</div>
+          <div class="space-price">$60</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom tax" data-pos="4" id="space-4">
+          <div class="space-icon">💰</div>
+          <div class="space-name">Income Tax</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom railroad" data-pos="5" id="space-5">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">Reading Railroad</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom property" data-pos="6" id="space-6">
+          <div class="color-band" style="background:var(--prop-lightblue)"></div>
+          <div class="space-name">Oriental Ave</div>
+          <div class="space-price">$100</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom special" data-pos="7" id="space-7">
+          <div class="space-icon">❓</div>
+          <div class="space-name">Chance</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom property" data-pos="8" id="space-8">
+          <div class="color-band" style="background:var(--prop-lightblue)"></div>
+          <div class="space-name">Vermont Ave</div>
+          <div class="space-price">$100</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space bottom property" data-pos="9" id="space-9">
+          <div class="color-band" style="background:var(--prop-lightblue)"></div>
+          <div class="space-name">Connecticut Ave</div>
+          <div class="space-price">$120</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ─── RIGHT COLUMN (pos 11–19) ─── -->
+        <div class="space right property" data-pos="11" id="space-11">
+          <div class="color-band" style="background:var(--prop-pink)"></div>
+          <div class="space-name">St. Charles Place</div>
+          <div class="space-price">$140</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right utility" data-pos="12" id="space-12">
+          <div class="space-icon">💡</div>
+          <div class="space-name">Electric Company</div>
+          <div class="space-price">$150</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right property" data-pos="13" id="space-13">
+          <div class="color-band" style="background:var(--prop-pink)"></div>
+          <div class="space-name">States Ave</div>
+          <div class="space-price">$140</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right property" data-pos="14" id="space-14">
+          <div class="color-band" style="background:var(--prop-pink)"></div>
+          <div class="space-name">Virginia Ave</div>
+          <div class="space-price">$160</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right railroad" data-pos="15" id="space-15">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">Pennsylvania Railroad</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right property" data-pos="16" id="space-16">
+          <div class="color-band" style="background:var(--prop-orange)"></div>
+          <div class="space-name">St. James Place</div>
+          <div class="space-price">$180</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right special" data-pos="17" id="space-17">
+          <div class="space-icon">🃏</div>
+          <div class="space-name">Community Chest</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right property" data-pos="18" id="space-18">
+          <div class="color-band" style="background:var(--prop-orange)"></div>
+          <div class="space-name">Tennessee Ave</div>
+          <div class="space-price">$180</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space right property" data-pos="19" id="space-19">
+          <div class="color-band" style="background:var(--prop-orange)"></div>
+          <div class="space-name">New York Ave</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ─── TOP ROW (pos 21–29) ─── -->
+        <div class="space top property" data-pos="21" id="space-21">
+          <div class="color-band" style="background:var(--prop-red)"></div>
+          <div class="space-name">Kentucky Ave</div>
+          <div class="space-price">$220</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top special" data-pos="22" id="space-22">
+          <div class="space-icon">❓</div>
+          <div class="space-name">Chance</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top property" data-pos="23" id="space-23">
+          <div class="color-band" style="background:var(--prop-red)"></div>
+          <div class="space-name">Indiana Ave</div>
+          <div class="space-price">$220</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top property" data-pos="24" id="space-24">
+          <div class="color-band" style="background:var(--prop-red)"></div>
+          <div class="space-name">Illinois Ave</div>
+          <div class="space-price">$240</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top railroad" data-pos="25" id="space-25">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">B&amp;O Railroad</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top property" data-pos="26" id="space-26">
+          <div class="color-band" style="background:var(--prop-yellow)"></div>
+          <div class="space-name">Atlantic Ave</div>
+          <div class="space-price">$260</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top property" data-pos="27" id="space-27">
+          <div class="color-band" style="background:var(--prop-yellow)"></div>
+          <div class="space-name">Ventnor Ave</div>
+          <div class="space-price">$260</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top utility" data-pos="28" id="space-28">
+          <div class="space-icon">💧</div>
+          <div class="space-name">Water Works</div>
+          <div class="space-price">$150</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space top property" data-pos="29" id="space-29">
+          <div class="color-band" style="background:var(--prop-yellow)"></div>
+          <div class="space-name">Marvin Gardens</div>
+          <div class="space-price">$280</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ─── LEFT COLUMN (pos 31–39) ─── -->
+        <div class="space left property" data-pos="31" id="space-31">
+          <div class="color-band" style="background:var(--prop-green)"></div>
+          <div class="space-name">Pacific Ave</div>
+          <div class="space-price">$300</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left property" data-pos="32" id="space-32">
+          <div class="color-band" style="background:var(--prop-green)"></div>
+          <div class="space-name">North Carolina Ave</div>
+          <div class="space-price">$300</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left special" data-pos="33" id="space-33">
+          <div class="space-icon">🃏</div>
+          <div class="space-name">Community Chest</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left property" data-pos="34" id="space-34">
+          <div class="color-band" style="background:var(--prop-green)"></div>
+          <div class="space-name">Pennsylvania Ave</div>
+          <div class="space-price">$320</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left railroad" data-pos="35" id="space-35">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">Short Line</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left special" data-pos="36" id="space-36">
+          <div class="space-icon">❓</div>
+          <div class="space-name">Chance</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left property" data-pos="37" id="space-37">
+          <div class="color-band" style="background:var(--prop-darkblue)"></div>
+          <div class="space-name">Park Place</div>
+          <div class="space-price">$350</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left tax" data-pos="38" id="space-38">
+          <div class="space-icon">💎</div>
+          <div class="space-name">Luxury Tax</div>
+          <div class="space-price">$100</div>
+          <div class="token-area"></div>
+        </div>
+
+        <div class="space left property" data-pos="39" id="space-39">
+          <div class="color-band" style="background:var(--prop-darkblue)"></div>
+          <div class="space-name">Boardwalk</div>
+          <div class="space-price">$400</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ─── BOARD CENTER ─── -->
+        <div class="board-center">
+          <h2 class="board-title">MONOPOLY<br><span>EMPIRE</span></h2>
+
+          <div class="dice-area">
+            <div class="die die-3d" id="die-1">
+              <div class="die-face face-1">
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-2">
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-3">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-4">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-5">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-6">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+            </div>
+
+            <div class="die die-3d" id="die-2">
+              <div class="die-face face-1">
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-2">
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-3">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-4">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-5">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <div class="die-face face-6">
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+            </div>
+          </div>
+
+          <div id="dice-result" class="dice-result"></div>
+
+          <div class="card-decks">
+            <div class="deck deck-chance">❓<span>Chance</span></div>
+            <div class="deck deck-chest">🃏<span>Community Chest</span></div>
+          </div>
+        </div>
+
+      </div>
+      <!-- ══════════ END BOARD ══════════ -->
+
+      <!-- ══════════ SIDE PANELS ══════════ -->
+      <div class="side-panels">
+
+        <!-- Turn Banner -->
+        <div class="turn-banner">
+          <span id="turn-token" class="turn-token"></span>
+          <span id="turn-player-name" class="turn-player-name">—</span>
+        </div>
+
+        <!-- Action Panel -->
+        <div class="action-panel">
+          <button id="btn-roll-dice" class="btn btn-roll" disabled>🎲 Roll Dice</button>
+          <button id="btn-buy" class="btn btn-action" disabled>🏠 Buy</button>
+          <button id="btn-end-turn" class="btn btn-action" disabled>✅ End Turn</button>
+          <button id="btn-build" class="btn btn-action" disabled>🏗️ Build</button>
+          <button id="btn-mortgage" class="btn btn-action" disabled>🏦 Mortgage</button>
+          <button id="btn-trade" class="btn btn-action" disabled>🤝 Trade</button>
+        </div>
+
+        <!-- Player Cards -->
+        <div class="player-cards-panel">
+          <h3>Players</h3>
+          <div id="player-cards"></div>
+        </div>
+
+        <!-- Game Log -->
+        <div class="game-log-panel">
+          <h3>Game Log</h3>
+          <div id="game-log" class="game-log"></div>
+        </div>
+
+        <!-- In-Game Chat -->
+        <div class="game-chat-panel">
+          <h3>Chat</h3>
+          <div id="game-chat-messages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input type="text" id="input-game-chat" placeholder="Type a message..." maxlength="200" autocomplete="off">
+            <button id="btn-send-game-chat" class="btn btn-icon">➤</button>
+          </div>
+        </div>
+
+      </div>
+      <!-- ══════════ END SIDE PANELS ══════════ -->
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- MODALS                                      -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <!-- Buy Property Modal -->
+  <div id="modal-buy" class="modal-overlay" style="display:none;">
+    <div class="modal modal-buy">
+      <div class="modal-property-card">
+        <div id="buy-card-color" class="modal-card-color"></div>
+        <h3 id="buy-card-name" class="modal-card-title">Property Name</h3>
+        <p id="buy-card-price" class="modal-card-price">$0</p>
+        <table class="rent-table">
+          <tbody>
+            <tr><td>Rent</td><td id="buy-rent-base">$0</td></tr>
+            <tr><td>With 1 House</td><td id="buy-rent-1h">$0</td></tr>
+            <tr><td>With 2 Houses</td><td id="buy-rent-2h">$0</td></tr>
+            <tr><td>With 3 Houses</td><td id="buy-rent-3h">$0</td></tr>
+            <tr><td>With 4 Houses</td><td id="buy-rent-4h">$0</td></tr>
+            <tr><td>With Hotel</td><td id="buy-rent-hotel">$0</td></tr>
+            <tr><td>House Cost</td><td id="buy-house-cost">$0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button id="modal-buy-confirm" class="btn btn-primary">Buy</button>
+        <button id="modal-buy-auction" class="btn btn-secondary">Auction</button>
+        <button id="modal-buy-pass" class="btn btn-ghost">Pass</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card Modal (Chance / Community Chest) -->
+  <div id="modal-card" class="modal-overlay" style="display:none;">
+    <div class="modal modal-card">
+      <div class="modal-card-header">
+        <h3 id="card-type">Chance</h3>
+      </div>
+      <p id="card-text" class="modal-card-body">Card description goes here.</p>
+      <div class="modal-actions">
+        <button id="card-ok" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rent Modal -->
+  <div id="modal-rent" class="modal-overlay" style="display:none;">
+    <div class="modal modal-rent">
+      <h3>Rent Due!</h3>
+      <p class="rent-detail">You landed on <strong id="rent-property-name">Property</strong></p>
+      <p class="rent-detail">Owned by <strong id="rent-owner-name">Player</strong></p>
+      <p class="rent-amount">Rent: <strong id="rent-amount">$0</strong></p>
+      <div class="modal-actions">
+        <button id="rent-pay" class="btn btn-primary">Pay Rent</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Build Modal -->
+  <div id="modal-build" class="modal-overlay" style="display:none;">
+    <div class="modal modal-build">
+      <h3>Build Houses &amp; Hotels</h3>
+      <div id="build-list" class="build-list"></div>
+      <div class="modal-actions">
+        <button id="build-confirm" class="btn btn-primary">Confirm</button>
+        <button id="build-cancel" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mortgage Modal -->
+  <div id="modal-mortgage" class="modal-overlay" style="display:none;">
+    <div class="modal modal-mortgage">
+      <h3>Mortgage Properties</h3>
+      <div id="mortgage-list" class="mortgage-list"></div>
+      <div class="modal-actions">
+        <button id="mortgage-close" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trade Modal -->
+  <div id="modal-trade" class="modal-overlay" style="display:none;">
+    <div class="modal modal-trade">
+      <h3>Propose a Trade</h3>
+      <div class="trade-partner-select">
+        <label for="trade-partner">Trade With:</label>
+        <select id="trade-partner"></select>
+      </div>
+      <div class="trade-columns">
+        <div class="trade-column trade-yours">
+          <h4>Your Offer</h4>
+          <div class="trade-cash-group">
+            <label for="trade-cash-yours">Cash ($)</label>
+            <input type="number" id="trade-cash-yours" min="0" value="0">
+          </div>
+          <div id="trade-props-yours" class="trade-props"></div>
+        </div>
+        <div class="trade-column trade-theirs">
+          <h4>Their Offer</h4>
+          <div class="trade-cash-group">
+            <label for="trade-cash-theirs">Cash ($)</label>
+            <input type="number" id="trade-cash-theirs" min="0" value="0">
+          </div>
+          <div id="trade-props-theirs" class="trade-props"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="trade-send" class="btn btn-primary">Send Offer</button>
+        <button id="trade-cancel" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bankruptcy Modal -->
+  <div id="modal-bankrupt" class="modal-overlay" style="display:none;">
+    <div class="modal modal-bankrupt">
+      <h3>⚠️ Bankruptcy Warning</h3>
+      <p id="bankrupt-message" class="bankrupt-text">You owe more than you can pay!</p>
+      <p class="bankrupt-detail">Amount owed: <strong id="bankrupt-owed">$0</strong></p>
+      <p class="bankrupt-detail">Your cash: <strong id="bankrupt-cash">$0</strong></p>
+      <div class="modal-actions">
+        <button id="bankrupt-manage" class="btn btn-secondary">Manage Assets</button>
+        <button id="bankrupt-declare" class="btn btn-danger">Declare Bankruptcy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Modal -->
+  <div id="modal-gameover" class="modal-overlay" style="display:none;">
+    <div class="modal modal-gameover">
+      <span class="gameover-crown">♛</span>
+      <h2>Game Over!</h2>
+      <h3 id="gameover-winner" class="gameover-winner">Winner Name</h3>
+      <div id="gameover-stats" class="gameover-stats"></div>
+      <div class="modal-actions">
+        <button id="gameover-new-game" class="btn btn-primary btn-large">New Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SCRIPTS                                     -->
+  <!-- ═══════════════════════════════════════════ -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="sounds.js"></script>
+  <script src="game.js"></script>
+
+</body>
+</html>
