@@ -51,11 +51,12 @@
     <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
     <div class="waiting-container">
       <div class="room-code-header">
-        <h2>Room Code</h2>
-        <div class="room-code-box">
-          <span id="room-code-display">------</span>
-          <button id="btn-copy-code" class="btn btn-icon" title="Copy code">📋</button>
+        <h2 style="color:var(--text-dim);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.15em;margin-bottom:6px;">Room Code</h2>
+        <div class="room-code-box" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:12px;background:rgba(240,200,80,0.05);border:1px solid rgba(240,200,80,0.15);border-radius:12px;">
+          <span id="room-code-display" class="room-code" style="font-size:3rem;letter-spacing:.3em;user-select:all;">------</span>
+          <button id="btn-copy-code" class="btn btn-icon" title="Copy code" style="font-size:1.5rem;">📋</button>
         </div>
+        <p style="font-size:0.8rem;color:#8892a8;margin-top:8px;text-align:center;">Share this code with friends to join</p>
       </div>
       <div class="player-list-card">
         <div class="player-list-header">

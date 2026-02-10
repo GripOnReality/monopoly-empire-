@@ -63,12 +63,14 @@ function shuffleArray(arr) {
 var PLAYER_COLORS = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c"];
 
 var CHARACTERS = [
-  { id: "tophat", emoji: "\U0001f3a9", name: "Top Hat" },
-  { id: "car", emoji: "\U0001f697", name: "Race Car" },
-  { id: "dog", emoji: "\U0001f415", name: "Good Boy" },
-  { id: "boot", emoji: "\U0001f462", name: "Boot" },
-  { id: "rocket", emoji: "\U0001f680", name: "Rocket" },
-  { id: "diamond", emoji: "\U0001f48e", name: "Diamond" }
+  { id: "red", color: "#e74c3c", name: "Crimson" },
+  { id: "blue", color: "#3498db", name: "Ocean" },
+  { id: "green", color: "#2ecc71", name: "Emerald" },
+  { id: "orange", color: "#f39c12", name: "Amber" },
+  { id: "purple", color: "#9b59b6", name: "Violet" },
+  { id: "teal", color: "#1abc9c", name: "Teal" },
+  { id: "pink", color: "#e91e8e", name: "Fuchsia" },
+  { id: "white", color: "#ecf0f1", name: "Ivory" }
 ];
 
 function getCharacter(id) {
@@ -190,14 +192,11 @@ function makeToken(seatIndex, characterId) {
   div.className = 'board-token';
   div.setAttribute('data-seat', seatIndex);
   var ch = getCharacter(characterId);
-  if (ch) {
-    div.textContent = ch.emoji;
-    div.style.fontSize = '16px';
-  } else {
-    div.textContent = (seatIndex + 1);
-  }
-  div.style.background = PLAYER_COLORS[seatIndex] || '#888';
-  div.style.color = '#fff';
+  // Use character color if selected, otherwise player color
+  var tokenColor = ch ? ch.color : (PLAYER_COLORS[seatIndex] || '#888');
+  div.textContent = (seatIndex + 1);
+  div.style.background = tokenColor;
+  div.style.color = (ch && ch.id === 'white') ? '#333' : '#fff';
   div.style.width = '24px';
   div.style.height = '24px';
   div.style.borderRadius = '50%';
@@ -205,8 +204,9 @@ function makeToken(seatIndex, characterId) {
   div.style.alignItems = 'center';
   div.style.justifyContent = 'center';
   div.style.fontWeight = 'bold';
+  div.style.fontSize = '12px';
   div.style.border = '2px solid rgba(255,255,255,0.7)';
-  div.style.boxShadow = '0 1px 3px rgba(0,0,0,0.4)';
+  div.style.boxShadow = '0 2px 6px rgba(0,0,0,0.5)';
   div.style.position = 'relative';
   div.style.zIndex = '5';
   div.style.margin = '1px';
@@ -892,8 +892,10 @@ MonopolyClient.prototype.connectSocket = function() {
   });
 
   this.socket.on('error-message', function(data) {
-    showToast(data.message || 'Error', 'error');
-    $('#landing-error').textContent = data.message || '';
+    var msg = data.error || data.message || 'Error';
+    showToast(msg, 'error');
+    var le = $('#landing-error');
+    if (le) le.textContent = msg;
   });
 };
 
@@ -952,9 +954,16 @@ MonopolyClient.prototype.joinRoom = function() {
 };
 
 MonopolyClient.prototype._onRoomCreated = function(data) {
+  if (data.success === false) {
+    $('#landing-error').textContent = data.error || 'Failed to create room';
+    return;
+  }
   this.roomCode = data.roomCode;
-  this.mySeat = data.seatIndex;
-  this.players = data.players || [];
+  this.mySeat = 0; // Creator is always seat 0
+  this.isHost = true;
+  // Server sends players inside gameState
+  var gs = data.gameState || data;
+  this.players = gs.players || data.players || [];
   this.reconnectToken = data.reconnectToken || null;
   saveSession('monopoly-session', {
     roomCode: this.roomCode,
@@ -967,11 +976,23 @@ MonopolyClient.prototype._onRoomCreated = function(data) {
 };
 
 MonopolyClient.prototype._onRoomJoined = function(data) {
+  if (data.success === false) {
+    $('#landing-error').textContent = data.error || 'Failed to join room';
+    return;
+  }
   this.roomCode = data.roomCode;
   this.mySeat = data.seatIndex;
-  this.players = data.players || [];
+  // Server sends players inside gameState
+  var gs = data.gameState || data;
+  this.players = gs.players || data.players || [];
   this.reconnectToken = data.reconnectToken || null;
-  if (data.isHost !== undefined) this.isHost = data.isHost;
+  // Determine host from gameState
+  if (gs.hostId) {
+    var mySocketId = this.socket.id;
+    this.isHost = (gs.hostId === mySocketId);
+  } else if (data.isHost !== undefined) {
+    this.isHost = data.isHost;
+  }
   saveSession('monopoly-session', {
     roomCode: this.roomCode,
     mySeat: this.mySeat,
@@ -992,21 +1013,36 @@ MonopolyClient.prototype._onRoomJoined = function(data) {
 };
 
 MonopolyClient.prototype._onPlayerJoined = function(data) {
-  this.players = data.players || this.players;
-  if (data.player) {
+  // Server sends gameState.players with the full player list
+  var gs = data.gameState || {};
+  if (gs.players) {
+    this.players = gs.players;
+  } else if (data.player) {
     var found = false;
     for (var i = 0; i < this.players.length; i++) {
       if (this.players[i].seatIndex === data.player.seatIndex) { found = true; break; }
     }
     if (!found) this.players.push(data.player);
   }
+  // Re-check host status
+  if (gs.hostId) this.isHost = (gs.hostId === this.socket.id);
   this._renderPlayerList();
   this._renderWaitingStatus();
   showToast((data.player ? data.player.name : 'Someone') + ' joined!', 'info');
 };
 
 MonopolyClient.prototype._onPlayerLeft = function(data) {
-  this.players = data.players || this.players;
+  var gs = data.gameState || {};
+  if (gs.players) this.players = gs.players;
+  // Re-check host & seat
+  if (gs.hostId) this.isHost = (gs.hostId === this.socket.id);
+  // Re-find our seat (might have shifted)
+  for (var i = 0; i < this.players.length; i++) {
+    if (this.players[i].id === this.socket.id) {
+      this.mySeat = this.players[i].seatIndex;
+      break;
+    }
+  }
   this._renderPlayerList();
   this._renderWaitingStatus();
 };
@@ -1054,7 +1090,8 @@ MonopolyClient.prototype._onPlayerAbandoned = function(data) {
 /* ────────── WAITING ROOM ────────── */
 MonopolyClient.prototype._enterWaitingRoom = function() {
   showScreen('screen-waiting');
-  $('#room-code-display').textContent = this.roomCode;
+  var codeEl = $('#room-code-display');
+  if (codeEl) codeEl.textContent = this.roomCode || '------';
   this._renderPlayerList();
   this._renderWaitingStatus();
   this._bindWaitingRoom();
@@ -1067,16 +1104,22 @@ MonopolyClient.prototype._bindWaitingRoom = function() {
   this._waitingBound = true;
 
   $('#btn-copy-code').addEventListener('click', function() {
+    var code = self.roomCode || $('#room-code-display').textContent;
+    if (!code || code === '------') { showToast('No room code yet', 'error'); return; }
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(self.roomCode).then(function() {
-        showToast('Room code copied!', 'info');
+      navigator.clipboard.writeText(code).then(function() {
+        showToast('Copied: ' + code, 'success');
+      }).catch(function() {
+        showToast('Code: ' + code, 'info');
       });
+    } else {
+      showToast('Code: ' + code, 'info');
     }
   });
 
   $('#btn-start-game').addEventListener('click', function() {
     if (self.isHost && self.players.length >= 2) {
-      self.socket.emit('start-game');
+      self.socket.emit('game-action', { action: 'start-game' });
     }
   });
 
@@ -1101,8 +1144,9 @@ MonopolyClient.prototype._renderPlayerList = function() {
     var p = this.players[i];
     var color = PLAYER_COLORS[p.seatIndex] || '#888';
     var dc = (p.connected === false) ? ' (disconnected)' : '';
-    var hostBadge = (i === 0 || p.isHost) ? ' <span class="badge badge-host">HOST</span>' : '';
-    var youBadge = (p.seatIndex === this.mySeat) ? ' <span class="badge badge-you">YOU</span>' : '';
+    var isPlayerHost = (p.seatIndex === 0 || p.id === (this.players[0] && this.players[0].id));
+    var hostBadge = isPlayerHost ? ' <span style="background:rgba(240,200,80,.15);color:#f0c850;font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600;margin-left:6px;">HOST</span>' : '';
+    var youBadge = (p.seatIndex === this.mySeat) ? ' <span style="background:rgba(52,152,219,.15);color:#3498db;font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600;margin-left:4px;">YOU</span>' : '';
     html += '<div class="player-row" style="border-left:4px solid ' + color + ';padding:8px 12px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px;">';
     html += '<span style="color:' + color + ';font-weight:600;font-size:14px;">' + escHtml(p.name || p.playerName || ('Player ' + (p.seatIndex + 1))) + '</span>';
     html += hostBadge + youBadge;
@@ -1206,7 +1250,7 @@ MonopolyClient.prototype._renderCharacterGrid = function() {
     html += 'opacity:' + ((taken && !selectedByMe) ? '0.4' : '1') + ';';
     html += 'border:3px solid ' + (selectedByMe ? '#f39c12' : (taken ? '#666' : 'rgba(255,255,255,0.2)')) + ';';
     html += 'border-radius:12px;padding:20px;text-align:center;background:rgba(255,255,255,0.05);transition:all 0.2s;">';
-    html += '<div style="font-size:48px;margin-bottom:8px;">' + ch.emoji + '</div>';
+    html += '<div style="width:60px;height:60px;border-radius:50%;background:' + ch.color + ';margin:0 auto 10px;border:3px solid rgba(255,255,255,0.3);box-shadow:0 4px 12px rgba(0,0,0,0.3);"></div>';
     html += '<div style="font-size:14px;font-weight:600;color:#fff;">' + ch.name + '</div>';
     if (taken && !selectedByMe) {
       var takerName = '';
@@ -1269,7 +1313,8 @@ MonopolyClient.prototype._renderCharacterPreview = function() {
     var confirmed = this._characterConfirmed[String(p.seatIndex)];
     var color = PLAYER_COLORS[p.seatIndex] || '#888';
     html += '<div style="display:inline-flex;align-items:center;margin:4px 8px;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.08);border:2px solid ' + (confirmed ? '#2ecc71' : 'transparent') + ';">';
-    html += '<span style="font-size:20px;margin-right:6px;">' + (ch ? ch.emoji : '❓') + '</span>';
+    var prevColor = ch ? ch.color : '#555';
+    html += '<span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:' + prevColor + ';border:2px solid rgba(255,255,255,0.3);margin-right:6px;flex-shrink:0;"></span>';
     html += '<span style="color:' + color + ';font-size:13px;font-weight:600;">' + escHtml(p.name || p.playerName || '') + '</span>';
     if (confirmed) html += '<span style="color:#2ecc71;margin-left:4px;">✓</span>';
     html += '</div>';
@@ -1325,10 +1370,12 @@ MonopolyClient.prototype._startActualGame = function() {
     var p = this.players[i];
     var seat = p.seatIndex;
     var charId = this._characterSelections[String(seat)] || null;
+    var ch = getCharacter(charId);
+    var playerColor = ch ? ch.color : PLAYER_COLORS[seat];
     this.engine.addPlayer(
       p.name || p.playerName || ('Player ' + (seat + 1)),
       seat,
-      PLAYER_COLORS[seat],
+      playerColor,
       charId
     );
   }
@@ -1354,7 +1401,7 @@ MonopolyClient.prototype.rollDice = function() {
     return;
   }
 
-  this.socket.emit('roll-dice');
+  this.socket.emit('game-action', { action: 'roll-dice' });
 };
 
 MonopolyClient.prototype._onDiceRolled = function(data) {
@@ -1427,7 +1474,7 @@ MonopolyClient.prototype.showJailOptions = function() {
 
     if (rollBtn) rollBtn.addEventListener('click', function() {
       self.closeCustomModal();
-      self.socket.emit('roll-dice');
+      self.socket.emit('game-action', { action: 'roll-dice' });
     });
     if (payBtn) payBtn.addEventListener('click', function() {
       self.closeCustomModal();
@@ -2158,8 +2205,23 @@ MonopolyClient.prototype.checkBankrupt = function(player, creditorSeat) {
 MonopolyClient.prototype.showGameOverModal = function(winner) {
   playVictoryMusic();
   var ch = getCharacter(winner.characterId);
-  $('#gameover-winner-token').textContent = ch ? ch.emoji : ('P' + (winner.seatIndex + 1));
-  $('#gameover-winner-token').style.background = winner.color || PLAYER_COLORS[winner.seatIndex];
+  var winToken = $('#gameover-winner-token');
+  if (winToken) {
+    winToken.textContent = winner.seatIndex + 1;
+    var wColor = ch ? ch.color : (winner.color || PLAYER_COLORS[winner.seatIndex]);
+    winToken.style.background = wColor;
+    winToken.style.width = '60px';
+    winToken.style.height = '60px';
+    winToken.style.borderRadius = '50%';
+    winToken.style.display = 'inline-flex';
+    winToken.style.alignItems = 'center';
+    winToken.style.justifyContent = 'center';
+    winToken.style.fontSize = '24px';
+    winToken.style.fontWeight = 'bold';
+    winToken.style.color = '#fff';
+    winToken.style.border = '3px solid rgba(255,255,255,0.5)';
+    winToken.style.margin = '0 auto 10px';
+  }
   $('#gameover-winner-name').textContent = winner.name;
 
   var stats = $('#gameover-stats');
@@ -2461,7 +2523,8 @@ MonopolyClient.prototype.renderPlayerCards = function() {
     // Name row
     html += '<div style="display:flex;align-items:center;justify-content:space-between;">';
     html += '<div style="display:flex;align-items:center;gap:6px;">';
-    if (ch) html += '<span style="font-size:18px;">' + ch.emoji + '</span>';
+    var dotColor = ch ? ch.color : color;
+    html += '<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:' + dotColor + ';border:2px solid rgba(255,255,255,0.4);flex-shrink:0;"></span>';
     html += '<span style="font-size:14px;font-weight:700;color:' + color + ';">' + escHtml(p.name) + '</span>';
     if (isMe) html += '<span style="font-size:10px;color:#f39c12;font-weight:600;"> (YOU)</span>';
     html += '</div>';
