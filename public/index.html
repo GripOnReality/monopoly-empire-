@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
         <div class="divider"><span>OR JOIN</span></div>
         <div class="input-group">
           <label for="input-code">Room Code</label>
-          <input type="text" id="input-code" placeholder="XXXXXX" maxlength="6" autocomplete="off" style="text-transform:uppercase;letter-spacing:.3em;text-align:center;font-family:'Oswald',sans-serif;font-size:1.2rem;">
+          <input type="text" id="input-code" placeholder="XXXXXX" maxlength="6" autocomplete="off" style="text-transform:uppercase;letter-spacing:.3em;text-align:center;font-size:1.2rem;">
         </div>
         <button id="btn-join" class="btn btn-secondary btn-large" disabled>Join Room</button>
         <p id="landing-error" class="error-text"></p>
@@ -51,12 +51,12 @@
     <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
     <div class="waiting-container">
       <div class="room-code-header">
-        <h2 style="color:var(--text-dim);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.15em;margin-bottom:6px;">Room Code</h2>
-        <div class="room-code-box" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:12px;background:rgba(240,200,80,0.05);border:1px solid rgba(240,200,80,0.15);border-radius:12px;">
-          <span id="room-code-display" class="room-code" style="font-size:3rem;letter-spacing:.3em;user-select:all;">------</span>
-          <button id="btn-copy-code" class="btn btn-icon" title="Copy code" style="font-size:1.5rem;">📋</button>
+        <h2 class="room-code-label">Room Code</h2>
+        <div class="room-code-box">
+          <span id="room-code-display" class="room-code">------</span>
+          <button id="btn-copy-code" class="btn btn-icon" title="Copy code">📋</button>
         </div>
-        <p style="font-size:0.8rem;color:#8892a8;margin-top:8px;text-align:center;">Share this code with friends to join</p>
+        <p class="room-code-hint">Share this code with friends to join</p>
       </div>
       <div class="player-list-card">
         <div class="player-list-header">
@@ -89,7 +89,7 @@
       <h2 class="character-select-title">Choose Your Token</h2>
       <p class="character-select-subtitle">Pick wisely — your empire awaits</p>
       <div id="character-grid" class="character-grid">
-        <!-- JS will populate 6 character cards -->
+        <!-- JS will populate character cards -->
       </div>
       <div id="selected-players-preview" class="selected-players-preview">
         <!-- Shows who picked what -->
@@ -104,11 +104,26 @@
   <!-- ═══════════════════════════════════════════════════════ -->
   <div id="screen-game" class="screen">
 
+    <!-- YOUR TURN BANNER -->
+    <div id="your-turn-banner" class="your-turn-banner" style="display:none;">
+      <span class="your-turn-text">YOUR TURN!</span>
+    </div>
+
+    <!-- FLOATING TEXT (money animations) -->
+    <div id="floating-text-container" class="floating-text-container"></div>
+
+    <!-- CONFETTI -->
+    <div id="confetti-container" class="confetti-container"></div>
+
+    <!-- SPACE TOOLTIP -->
+    <div id="space-tooltip" class="space-tooltip" style="display:none;"></div>
+
     <!-- LEFT PANEL -->
     <aside class="panel panel-left">
       <div class="turn-banner">
         <span id="turn-token" class="turn-token"></span>
         <span id="turn-player-name" class="turn-player-name">—</span>
+        <div id="waiting-text" class="waiting-text"></div>
       </div>
       <div class="action-buttons">
         <button id="btn-roll-dice" class="btn btn-primary btn-action" disabled>🎲 Roll Dice</button>
@@ -125,383 +140,385 @@
     <!-- ═════════════════════════════════════════════ -->
     <!-- BOARD  (11×11 CSS grid, 40 spaces)           -->
     <!-- ═════════════════════════════════════════════ -->
-    <main class="board" id="board">
+    <main class="board-wrapper">
+      <div class="board" id="board">
 
-      <!-- ────── BOTTOM ROW (pos 0–10, right-to-left visually) ────── -->
+        <!-- ────── BOTTOM ROW (pos 0–10, right-to-left visually) ────── -->
 
-      <!-- Pos 0 : GO (corner-bl) -->
-      <div class="space corner corner-bl" data-pos="0" id="space-0">
-        <div class="corner-content">
-          <div class="corner-label-top">COLLECT $200</div>
-          <div class="corner-big">GO</div>
-          <div class="corner-arrow">⬅</div>
-        </div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 1 : Broke Boulevard -->
-      <div class="space bottom property" data-pos="1" id="space-1">
-        <div class="color-band" style="background:var(--prop-brown)"></div>
-        <div class="space-name">Broke Boulevard</div>
-        <div class="space-price">$60</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 2 : Community Chest -->
-      <div class="space bottom special" data-pos="2" id="space-2">
-        <div class="space-icon">🃏</div>
-        <div class="space-name">Community Chest</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 3 : Ramen Row -->
-      <div class="space bottom property" data-pos="3" id="space-3">
-        <div class="color-band" style="background:var(--prop-brown)"></div>
-        <div class="space-name">Ramen Row</div>
-        <div class="space-price">$60</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 4 : Income Tax -->
-      <div class="space bottom special" data-pos="4" id="space-4">
-        <div class="space-icon">💸</div>
-        <div class="space-name">Income Tax</div>
-        <div class="space-price">$200</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 5 : Midnight Express (railroad) -->
-      <div class="space bottom railroad" data-pos="5" id="space-5">
-        <div class="space-icon">🚂</div>
-        <div class="space-name">Midnight Express</div>
-        <div class="space-price">$200</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 6 : Thrift Lane -->
-      <div class="space bottom property" data-pos="6" id="space-6">
-        <div class="color-band" style="background:var(--prop-lightblue)"></div>
-        <div class="space-name">Thrift Lane</div>
-        <div class="space-price">$100</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 7 : Chance -->
-      <div class="space bottom special" data-pos="7" id="space-7">
-        <div class="space-icon">❓</div>
-        <div class="space-name">Chance</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 8 : Flea Market Ave -->
-      <div class="space bottom property" data-pos="8" id="space-8">
-        <div class="color-band" style="background:var(--prop-lightblue)"></div>
-        <div class="space-name">Flea Market Ave</div>
-        <div class="space-price">$100</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 9 : Garage Sale Ct -->
-      <div class="space bottom property" data-pos="9" id="space-9">
-        <div class="color-band" style="background:var(--prop-lightblue)"></div>
-        <div class="space-name">Garage Sale Ct</div>
-        <div class="space-price">$120</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 10 : JAIL (corner-br) -->
-      <div class="space corner corner-br" data-pos="10" id="space-10">
-        <div class="corner-content">
-          <div class="corner-label-top">JUST</div>
-          <div class="corner-big">JAIL</div>
-          <div class="corner-label-bottom">VISITING</div>
-        </div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- ────── LEFT COLUMN (pos 11–19, bottom-to-top) ────── -->
-
-      <!-- Pos 11 : Neon Strip -->
-      <div class="space left property" data-pos="11" id="space-11">
-        <div class="color-band" style="background:var(--prop-pink)"></div>
-        <div class="space-name">Neon Strip</div>
-        <div class="space-price">$140</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 12 : Volt Works (utility/electric) -->
-      <div class="space left utility" data-pos="12" id="space-12">
-        <div class="space-icon">⚡</div>
-        <div class="space-name">Volt Works</div>
-        <div class="space-price">$150</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 13 : Lipstick Lane -->
-      <div class="space left property" data-pos="13" id="space-13">
-        <div class="color-band" style="background:var(--prop-pink)"></div>
-        <div class="space-name">Lipstick Lane</div>
-        <div class="space-price">$140</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 14 : Velvet Lounge -->
-      <div class="space left property" data-pos="14" id="space-14">
-        <div class="color-band" style="background:var(--prop-pink)"></div>
-        <div class="space-name">Velvet Lounge</div>
-        <div class="space-price">$160</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 15 : Thunder Rail (railroad) -->
-      <div class="space left railroad" data-pos="15" id="space-15">
-        <div class="space-icon">🚂</div>
-        <div class="space-name">Thunder Rail</div>
-        <div class="space-price">$200</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 16 : Taco Terrace -->
-      <div class="space left property" data-pos="16" id="space-16">
-        <div class="color-band" style="background:var(--prop-orange)"></div>
-        <div class="space-name">Taco Terrace</div>
-        <div class="space-price">$180</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 17 : Community Chest -->
-      <div class="space left special" data-pos="17" id="space-17">
-        <div class="space-icon">🃏</div>
-        <div class="space-name">Community Chest</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 18 : Salsa Street -->
-      <div class="space left property" data-pos="18" id="space-18">
-        <div class="color-band" style="background:var(--prop-orange)"></div>
-        <div class="space-name">Salsa Street</div>
-        <div class="space-price">$180</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 19 : Fiesta Plaza -->
-      <div class="space left property" data-pos="19" id="space-19">
-        <div class="color-band" style="background:var(--prop-orange)"></div>
-        <div class="space-name">Fiesta Plaza</div>
-        <div class="space-price">$200</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- ────── TOP ROW (pos 20–30, left-to-right) ────── -->
-
-      <!-- Pos 20 : FREE PARKING (corner-tl) -->
-      <div class="space corner corner-tl" data-pos="20" id="space-20">
-        <div class="corner-content">
-          <div class="corner-label-top">FREE</div>
-          <div class="corner-big">🅿️</div>
-          <div class="corner-label-bottom">PARKING</div>
-        </div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 21 : Crimson Court -->
-      <div class="space top property" data-pos="21" id="space-21">
-        <div class="color-band" style="background:var(--prop-red)"></div>
-        <div class="space-name">Crimson Court</div>
-        <div class="space-price">$220</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 22 : Chance -->
-      <div class="space top special" data-pos="22" id="space-22">
-        <div class="space-icon">❓</div>
-        <div class="space-name">Chance</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 23 : Scarlet Row -->
-      <div class="space top property" data-pos="23" id="space-23">
-        <div class="color-band" style="background:var(--prop-red)"></div>
-        <div class="space-name">Scarlet Row</div>
-        <div class="space-price">$220</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 24 : Inferno Ave -->
-      <div class="space top property" data-pos="24" id="space-24">
-        <div class="color-band" style="background:var(--prop-red)"></div>
-        <div class="space-name">Inferno Ave</div>
-        <div class="space-price">$240</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 25 : Ghost Line (railroad) -->
-      <div class="space top railroad" data-pos="25" id="space-25">
-        <div class="space-icon">🚂</div>
-        <div class="space-name">Ghost Line</div>
-        <div class="space-price">$200</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 26 : Gold Rush Blvd -->
-      <div class="space top property" data-pos="26" id="space-26">
-        <div class="color-band" style="background:var(--prop-yellow)"></div>
-        <div class="space-name">Gold Rush Blvd</div>
-        <div class="space-price">$260</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 27 : Sunburn Strip -->
-      <div class="space top property" data-pos="27" id="space-27">
-        <div class="color-band" style="background:var(--prop-yellow)"></div>
-        <div class="space-name">Sunburn Strip</div>
-        <div class="space-price">$260</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 28 : Aqua Pipes (utility/water) -->
-      <div class="space top utility" data-pos="28" id="space-28">
-        <div class="space-icon">💧</div>
-        <div class="space-name">Aqua Pipes</div>
-        <div class="space-price">$150</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 29 : Lemon Drop Ln -->
-      <div class="space top property" data-pos="29" id="space-29">
-        <div class="color-band" style="background:var(--prop-yellow)"></div>
-        <div class="space-name">Lemon Drop Ln</div>
-        <div class="space-price">$280</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 30 : GO TO JAIL (corner-tr) -->
-      <div class="space corner corner-tr" data-pos="30" id="space-30">
-        <div class="corner-content">
-          <div class="corner-label-top">GO TO</div>
-          <div class="corner-big">🚔</div>
-          <div class="corner-label-bottom">JAIL</div>
-        </div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- ────── RIGHT COLUMN (pos 31–39, top-to-bottom) ────── -->
-
-      <!-- Pos 31 : Emerald Heights -->
-      <div class="space right property" data-pos="31" id="space-31">
-        <div class="color-band" style="background:var(--prop-green)"></div>
-        <div class="space-name">Emerald Heights</div>
-        <div class="space-price">$300</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 32 : Jade Terrace -->
-      <div class="space right property" data-pos="32" id="space-32">
-        <div class="color-band" style="background:var(--prop-green)"></div>
-        <div class="space-name">Jade Terrace</div>
-        <div class="space-price">$300</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 33 : Community Chest -->
-      <div class="space right special" data-pos="33" id="space-33">
-        <div class="space-icon">🃏</div>
-        <div class="space-name">Community Chest</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 34 : Forest Manor -->
-      <div class="space right property" data-pos="34" id="space-34">
-        <div class="color-band" style="background:var(--prop-green)"></div>
-        <div class="space-name">Forest Manor</div>
-        <div class="space-price">$320</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 35 : Phantom Express (railroad) -->
-      <div class="space right railroad" data-pos="35" id="space-35">
-        <div class="space-icon">🚂</div>
-        <div class="space-name">Phantom Express</div>
-        <div class="space-price">$200</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 36 : Chance -->
-      <div class="space right special" data-pos="36" id="space-36">
-        <div class="space-icon">❓</div>
-        <div class="space-name">Chance</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 37 : Royal Row -->
-      <div class="space right property" data-pos="37" id="space-37">
-        <div class="color-band" style="background:var(--prop-darkblue)"></div>
-        <div class="space-name">Royal Row</div>
-        <div class="space-price">$350</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 38 : Luxury Tax -->
-      <div class="space right special" data-pos="38" id="space-38">
-        <div class="space-icon">💎</div>
-        <div class="space-name">Luxury Tax</div>
-        <div class="space-price">$100</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- Pos 39 : Empire Tower -->
-      <div class="space right property" data-pos="39" id="space-39">
-        <div class="color-band" style="background:var(--prop-darkblue)"></div>
-        <div class="space-name">Empire Tower</div>
-        <div class="space-price">$400</div>
-        <div class="token-area"></div>
-      </div>
-
-      <!-- ────── BOARD CENTER ────── -->
-      <div class="board-center" id="board-center">
-        <div class="center-title">
-          <span class="center-crown">♛</span>
-          <h2>MONOPOLY</h2>
-          <h3>EMPIRE</h3>
+        <!-- Pos 0 : GO (corner-bl) -->
+        <div class="space corner corner-bl" data-pos="0" id="space-0">
+          <div class="corner-content">
+            <div class="corner-label-top">COLLECT $200</div>
+            <div class="corner-big">GO</div>
+            <div class="corner-arrow">⬅</div>
+          </div>
+          <div class="token-area"></div>
         </div>
 
-        <div class="dice-area">
-          <div class="die" id="die-1">
-            <div class="die-inner">
-              <div class="die-face face-1"><span class="pip"></span></div>
-              <div class="die-face face-2"><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-3"><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-4"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-5"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-6"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+        <!-- Pos 1 : Broke Boulevard -->
+        <div class="space bottom property" data-pos="1" id="space-1">
+          <div class="color-band" style="background:var(--prop-brown)"></div>
+          <div class="space-name">Broke Boulevard</div>
+          <div class="space-price">$60</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 2 : Community Chest -->
+        <div class="space bottom special" data-pos="2" id="space-2">
+          <div class="space-icon">🃏</div>
+          <div class="space-name">Community Chest</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 3 : Ramen Row -->
+        <div class="space bottom property" data-pos="3" id="space-3">
+          <div class="color-band" style="background:var(--prop-brown)"></div>
+          <div class="space-name">Ramen Row</div>
+          <div class="space-price">$60</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 4 : Income Tax -->
+        <div class="space bottom special" data-pos="4" id="space-4">
+          <div class="space-icon">💸</div>
+          <div class="space-name">Income Tax</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 5 : Midnight Express (railroad) -->
+        <div class="space bottom railroad" data-pos="5" id="space-5">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">Midnight Express</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 6 : Thrift Lane -->
+        <div class="space bottom property" data-pos="6" id="space-6">
+          <div class="color-band" style="background:var(--prop-lightblue)"></div>
+          <div class="space-name">Thrift Lane</div>
+          <div class="space-price">$100</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 7 : Chance -->
+        <div class="space bottom special" data-pos="7" id="space-7">
+          <div class="space-icon">❓</div>
+          <div class="space-name">Chance</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 8 : Flea Market Ave -->
+        <div class="space bottom property" data-pos="8" id="space-8">
+          <div class="color-band" style="background:var(--prop-lightblue)"></div>
+          <div class="space-name">Flea Market Ave</div>
+          <div class="space-price">$100</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 9 : Garage Sale Ct -->
+        <div class="space bottom property" data-pos="9" id="space-9">
+          <div class="color-band" style="background:var(--prop-lightblue)"></div>
+          <div class="space-name">Garage Sale Ct</div>
+          <div class="space-price">$120</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 10 : JAIL (corner-br) -->
+        <div class="space corner corner-br" data-pos="10" id="space-10">
+          <div class="corner-content">
+            <div class="corner-label-top">JUST</div>
+            <div class="corner-big">JAIL</div>
+            <div class="corner-label-bottom">VISITING</div>
+          </div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ────── LEFT COLUMN (pos 11–19, bottom-to-top) ────── -->
+
+        <!-- Pos 11 : Neon Strip -->
+        <div class="space left property" data-pos="11" id="space-11">
+          <div class="color-band" style="background:var(--prop-pink)"></div>
+          <div class="space-name">Neon Strip</div>
+          <div class="space-price">$140</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 12 : Volt Works (utility/electric) -->
+        <div class="space left utility" data-pos="12" id="space-12">
+          <div class="space-icon">⚡</div>
+          <div class="space-name">Volt Works</div>
+          <div class="space-price">$150</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 13 : Lipstick Lane -->
+        <div class="space left property" data-pos="13" id="space-13">
+          <div class="color-band" style="background:var(--prop-pink)"></div>
+          <div class="space-name">Lipstick Lane</div>
+          <div class="space-price">$140</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 14 : Velvet Lounge -->
+        <div class="space left property" data-pos="14" id="space-14">
+          <div class="color-band" style="background:var(--prop-pink)"></div>
+          <div class="space-name">Velvet Lounge</div>
+          <div class="space-price">$160</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 15 : Thunder Rail (railroad) -->
+        <div class="space left railroad" data-pos="15" id="space-15">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">Thunder Rail</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 16 : Taco Terrace -->
+        <div class="space left property" data-pos="16" id="space-16">
+          <div class="color-band" style="background:var(--prop-orange)"></div>
+          <div class="space-name">Taco Terrace</div>
+          <div class="space-price">$180</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 17 : Community Chest -->
+        <div class="space left special" data-pos="17" id="space-17">
+          <div class="space-icon">🃏</div>
+          <div class="space-name">Community Chest</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 18 : Salsa Street -->
+        <div class="space left property" data-pos="18" id="space-18">
+          <div class="color-band" style="background:var(--prop-orange)"></div>
+          <div class="space-name">Salsa Street</div>
+          <div class="space-price">$180</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 19 : Fiesta Plaza -->
+        <div class="space left property" data-pos="19" id="space-19">
+          <div class="color-band" style="background:var(--prop-orange)"></div>
+          <div class="space-name">Fiesta Plaza</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ────── TOP ROW (pos 20–30, left-to-right) ────── -->
+
+        <!-- Pos 20 : FREE PARKING (corner-tl) -->
+        <div class="space corner corner-tl" data-pos="20" id="space-20">
+          <div class="corner-content">
+            <div class="corner-label-top">FREE</div>
+            <div class="corner-big">🅿️</div>
+            <div class="corner-label-bottom">PARKING</div>
+          </div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 21 : Crimson Court -->
+        <div class="space top property" data-pos="21" id="space-21">
+          <div class="color-band" style="background:var(--prop-red)"></div>
+          <div class="space-name">Crimson Court</div>
+          <div class="space-price">$220</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 22 : Chance -->
+        <div class="space top special" data-pos="22" id="space-22">
+          <div class="space-icon">❓</div>
+          <div class="space-name">Chance</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 23 : Scarlet Row -->
+        <div class="space top property" data-pos="23" id="space-23">
+          <div class="color-band" style="background:var(--prop-red)"></div>
+          <div class="space-name">Scarlet Row</div>
+          <div class="space-price">$220</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 24 : Inferno Ave -->
+        <div class="space top property" data-pos="24" id="space-24">
+          <div class="color-band" style="background:var(--prop-red)"></div>
+          <div class="space-name">Inferno Ave</div>
+          <div class="space-price">$240</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 25 : Ghost Line (railroad) -->
+        <div class="space top railroad" data-pos="25" id="space-25">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">Ghost Line</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 26 : Gold Rush Blvd -->
+        <div class="space top property" data-pos="26" id="space-26">
+          <div class="color-band" style="background:var(--prop-yellow)"></div>
+          <div class="space-name">Gold Rush Blvd</div>
+          <div class="space-price">$260</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 27 : Sunburn Strip -->
+        <div class="space top property" data-pos="27" id="space-27">
+          <div class="color-band" style="background:var(--prop-yellow)"></div>
+          <div class="space-name">Sunburn Strip</div>
+          <div class="space-price">$260</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 28 : Aqua Pipes (utility/water) -->
+        <div class="space top utility" data-pos="28" id="space-28">
+          <div class="space-icon">💧</div>
+          <div class="space-name">Aqua Pipes</div>
+          <div class="space-price">$150</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 29 : Lemon Drop Ln -->
+        <div class="space top property" data-pos="29" id="space-29">
+          <div class="color-band" style="background:var(--prop-yellow)"></div>
+          <div class="space-name">Lemon Drop Ln</div>
+          <div class="space-price">$280</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 30 : GO TO JAIL (corner-tr) -->
+        <div class="space corner corner-tr" data-pos="30" id="space-30">
+          <div class="corner-content">
+            <div class="corner-label-top">GO TO</div>
+            <div class="corner-big">🚔</div>
+            <div class="corner-label-bottom">JAIL</div>
+          </div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ────── RIGHT COLUMN (pos 31–39, top-to-bottom) ────── -->
+
+        <!-- Pos 31 : Emerald Heights -->
+        <div class="space right property" data-pos="31" id="space-31">
+          <div class="color-band" style="background:var(--prop-green)"></div>
+          <div class="space-name">Emerald Heights</div>
+          <div class="space-price">$300</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 32 : Jade Terrace -->
+        <div class="space right property" data-pos="32" id="space-32">
+          <div class="color-band" style="background:var(--prop-green)"></div>
+          <div class="space-name">Jade Terrace</div>
+          <div class="space-price">$300</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 33 : Community Chest -->
+        <div class="space right special" data-pos="33" id="space-33">
+          <div class="space-icon">🃏</div>
+          <div class="space-name">Community Chest</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 34 : Forest Manor -->
+        <div class="space right property" data-pos="34" id="space-34">
+          <div class="color-band" style="background:var(--prop-green)"></div>
+          <div class="space-name">Forest Manor</div>
+          <div class="space-price">$320</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 35 : Phantom Express (railroad) -->
+        <div class="space right railroad" data-pos="35" id="space-35">
+          <div class="space-icon">🚂</div>
+          <div class="space-name">Phantom Express</div>
+          <div class="space-price">$200</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 36 : Chance -->
+        <div class="space right special" data-pos="36" id="space-36">
+          <div class="space-icon">❓</div>
+          <div class="space-name">Chance</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 37 : Royal Row -->
+        <div class="space right property" data-pos="37" id="space-37">
+          <div class="color-band" style="background:var(--prop-darkblue)"></div>
+          <div class="space-name">Royal Row</div>
+          <div class="space-price">$350</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 38 : Luxury Tax -->
+        <div class="space right special" data-pos="38" id="space-38">
+          <div class="space-icon">💎</div>
+          <div class="space-name">Luxury Tax</div>
+          <div class="space-price">$100</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- Pos 39 : Empire Tower -->
+        <div class="space right property" data-pos="39" id="space-39">
+          <div class="color-band" style="background:var(--prop-darkblue)"></div>
+          <div class="space-name">Empire Tower</div>
+          <div class="space-price">$400</div>
+          <div class="token-area"></div>
+        </div>
+
+        <!-- ────── BOARD CENTER ────── -->
+        <div class="board-center" id="board-center">
+          <div class="center-title">
+            <span class="center-crown">♛</span>
+            <h2>MONOPOLY</h2>
+            <h3>EMPIRE</h3>
+          </div>
+
+          <div class="dice-area" id="dice-area">
+            <div class="die" id="die-1">
+              <div class="die-inner">
+                <div class="die-face face-1"><span class="pip"></span></div>
+                <div class="die-face face-2"><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-3"><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-4"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-5"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-6"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+              </div>
+            </div>
+            <div class="die" id="die-2">
+              <div class="die-inner">
+                <div class="die-face face-1"><span class="pip"></span></div>
+                <div class="die-face face-2"><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-3"><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-4"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-5"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+                <div class="die-face face-6"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+              </div>
             </div>
           </div>
-          <div class="die" id="die-2">
-            <div class="die-inner">
-              <div class="die-face face-1"><span class="pip"></span></div>
-              <div class="die-face face-2"><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-3"><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-4"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-5"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
-              <div class="die-face face-6"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+          <div id="dice-result" class="dice-result"></div>
+
+          <div class="card-decks">
+            <div class="deck deck-chance">
+              <div class="deck-label">❓</div>
+              <span>Chance</span>
+            </div>
+            <div class="deck deck-chest">
+              <div class="deck-label">🃏</div>
+              <span>Community Chest</span>
             </div>
           </div>
         </div>
-        <div id="dice-result" class="dice-result"></div>
 
-        <div class="card-decks">
-          <div class="deck deck-chance">
-            <div class="deck-label">❓</div>
-            <span>Chance</span>
-          </div>
-          <div class="deck deck-chest">
-            <div class="deck-label">🃏</div>
-            <span>Community Chest</span>
-          </div>
-        </div>
-      </div>
-
-    </main><!-- /.board -->
+      </div><!-- /.board -->
+    </main><!-- /.board-wrapper -->
 
     <!-- RIGHT PANEL -->
     <aside class="panel panel-right">

@@ -192,25 +192,10 @@ function makeToken(seatIndex, characterId) {
   div.className = 'board-token';
   div.setAttribute('data-seat', seatIndex);
   var ch = getCharacter(characterId);
-  // Use character color if selected, otherwise player color
   var tokenColor = ch ? ch.color : (PLAYER_COLORS[seatIndex] || '#888');
   div.textContent = (seatIndex + 1);
   div.style.background = tokenColor;
   div.style.color = (ch && ch.id === 'white') ? '#333' : '#fff';
-  div.style.width = '24px';
-  div.style.height = '24px';
-  div.style.borderRadius = '50%';
-  div.style.display = 'inline-flex';
-  div.style.alignItems = 'center';
-  div.style.justifyContent = 'center';
-  div.style.fontWeight = 'bold';
-  div.style.fontSize = '12px';
-  div.style.border = '2px solid rgba(255,255,255,0.7)';
-  div.style.boxShadow = '0 2px 6px rgba(0,0,0,0.5)';
-  div.style.position = 'relative';
-  div.style.zIndex = '5';
-  div.style.margin = '1px';
-  div.style.lineHeight = '1';
   return div;
 }
 
@@ -1435,26 +1420,28 @@ MonopolyClient.prototype.animateDice = function(d1, d2, callback) {
   this._animating = true;
   var die1 = $('#die-1');
   var die2 = $('#die-2');
+  var diceArea = $('#dice-area');
   if (!die1 || !die2) { this._animating = false; if (callback) callback(); return; }
 
-  // BUG FIX #2: Target .die wrapper with classes
   die1.className = 'die rolling';
   die2.className = 'die rolling';
+  if (diceArea) diceArea.classList.add('dice-shaking');
 
   setTimeout(function() {
     die1.className = 'die show-' + d1;
     die2.className = 'die show-' + d2;
+    if (diceArea) diceArea.classList.remove('dice-shaking');
 
     var result = $('#dice-result');
     if (result) {
       result.textContent = d1 + ' + ' + d2 + ' = ' + (d1 + d2);
       if (d1 === d2) result.textContent += ' DOUBLES!';
-      result.style.fontSize = '16px';
-      result.style.fontWeight = '700';
+      result.className = 'dice-result-pop';
+      setTimeout(function() { result.className = ''; }, 600);
     }
 
     self._animating = false;
-    if (callback) setTimeout(callback, 200);
+    if (callback) setTimeout(callback, 300);
   }, 800);
 };
 
@@ -1747,13 +1734,14 @@ MonopolyClient.prototype.showBuyModal = function(pos) {
 MonopolyClient.prototype.confirmBuy = function() {
   var pos = this._buyPos;
   if (pos === undefined) return;
+  var space = BOARD_DATA[pos];
   var ok = this.engine.buyProperty(this.mySeat, pos);
   if (ok) {
-    var space = BOARD_DATA[pos];
     sfx('buy');
     this.addLog(this.engine.currentPlayer().name + ' bought ' + space.name + ' for $' + space.price);
     this.broadcastAction('property-bought', { seat: this.mySeat, pos: pos });
     this.syncState();
+    this.flashMoney(this.mySeat, -(space.price || 0));
   }
   this.closeModal('modal-buy');
   this.engine.gamePhase = 'action';
@@ -2488,15 +2476,15 @@ MonopolyClient.prototype.renderGame = function() {
   this.renderPropertyOwnership();
   this.renderTurnBanner();
   this.updateButtons();
+  this._setupSpaceTooltips();
 };
 
 MonopolyClient.prototype.renderTokensOnBoard = function() {
-  // Clear all tokens
   var areas = $$('.token-area');
   for (var i = 0; i < areas.length; i++) areas[i].innerHTML = '';
 
-  // Place tokens
   var players = this.engine.players;
+  var currentTurn = this.engine.currentTurn;
   for (var j = 0; j < players.length; j++) {
     var p = players[j];
     if (p.bankrupt) continue;
@@ -2505,6 +2493,7 @@ MonopolyClient.prototype.renderTokensOnBoard = function() {
     var area = spaceEl.querySelector('.token-area');
     if (!area) continue;
     var tok = makeToken(p.seatIndex, p.characterId);
+    if (p.seatIndex === currentTurn) tok.classList.add('current-player');
     area.appendChild(tok);
   }
 };
@@ -2526,43 +2515,55 @@ MonopolyClient.prototype.renderPlayerCards = function() {
     if (isCurrentTurn) cls += ' active-turn';
     if (p.bankrupt) cls += ' bankrupt';
 
-    html += '<div class="' + cls + '" style="border-left:4px solid ' + color + ';padding:8px 10px;margin:4px 0;background:rgba(255,255,255,' + (isCurrentTurn ? '0.1' : '0.03') + ');border-radius:6px;' + (p.bankrupt ? 'opacity:0.5;' : '') + '">';
+    html += '<div class="' + cls + '" data-seat="' + p.seatIndex + '" style="border-left-color:' + color + ';">';
 
-    // Name row
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;">';
-    html += '<div style="display:flex;align-items:center;gap:6px;">';
+    // Header row
+    html += '<div class="player-card-header">';
+    html += '<div class="player-card-identity">';
     var dotColor = ch ? ch.color : color;
-    html += '<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:' + dotColor + ';border:2px solid rgba(255,255,255,0.4);flex-shrink:0;"></span>';
-    html += '<span style="font-size:14px;font-weight:700;color:' + color + ';">' + escHtml(p.name) + '</span>';
-    if (isMe) html += '<span style="font-size:10px;color:#f39c12;font-weight:600;"> (YOU)</span>';
+    html += '<span class="player-card-dot" style="background:' + dotColor + ';"></span>';
+    html += '<span class="player-card-name" style="color:' + color + ';">' + escHtml(p.name) + '</span>';
+    if (isMe) html += '<span class="badge-you">YOU</span>';
     html += '</div>';
 
     // Badges
-    html += '<div style="display:flex;gap:4px;align-items:center;">';
-    if (!p.connected) html += '<span style="background:#e74c3c;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">DC</span>';
-    if (p.inJail) html += '<span style="background:#e67e22;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">JAIL</span>';
-    if (p.getOutOfJailCards > 0) html += '<span style="background:#27ae60;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">🃏x' + p.getOutOfJailCards + '</span>';
-    if (p.bankrupt) html += '<span style="background:#c0392b;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">BANKRUPT</span>';
+    html += '<div class="player-card-badges">';
+    if (!p.connected) html += '<span class="badge-dc">DC</span>';
+    if (p.inJail) html += '<span class="badge-jail">JAIL</span>';
+    if (p.getOutOfJailCards > 0) html += '<span class="badge-jail-card">🃏x' + p.getOutOfJailCards + '</span>';
+    if (p.bankrupt) html += '<span class="badge-bankrupt">BANKRUPT</span>';
     html += '</div></div>';
 
-    // Money
-    var moneyColor = p.money >= 0 ? '#2ecc71' : '#e74c3c';
-    html += '<div style="font-size:13px;font-weight:600;color:' + moneyColor + ';margin:4px 0;">$' + p.money + '</div>';
+    // Balance
+    html += '<div class="player-card-balance' + (p.money < 0 ? ' negative' : '') + '">$' + p.money + '</div>';
 
-    // Property chips
+    // Property dots grouped by color
     if (p.properties.length > 0) {
-      html += '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">';
+      // Group properties by color group
+      var groups = {};
       for (var k = 0; k < p.properties.length; k++) {
         var propPos = p.properties[k];
         var propSpace = BOARD_DATA[propPos];
-        var propState = this.engine.propertyState[propPos];
-        var dotColor = (propSpace.group && GROUP_COLORS[propSpace.group]) ? GROUP_COLORS[propSpace.group] : '#888';
-        var mortStyle = (propState && propState.mortgaged) ? 'opacity:0.3;' : '';
-        var houses = propState ? (propState.houses || 0) : 0;
-        var houseStr = '';
-        if (houses === 5) houseStr = '🏨';
-        else if (houses > 0) houseStr = houses + '';
-        html += '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:' + dotColor + ';font-size:8px;color:#fff;' + mortStyle + '" title="' + escHtml(propSpace.name) + (houses > 0 ? ' (' + houses + 'h)' : '') + '">' + houseStr + '</span>';
+        var grp = (propSpace.group) || 'other';
+        if (!groups[grp]) groups[grp] = [];
+        groups[grp].push(propPos);
+      }
+      html += '<div class="player-card-props">';
+      for (var g in groups) {
+        if (!groups.hasOwnProperty(g)) continue;
+        var propList = groups[g];
+        for (var m = 0; m < propList.length; m++) {
+          var pp = propList[m];
+          var ps = BOARD_DATA[pp];
+          var pState = this.engine.propertyState[pp];
+          var pColor = (ps.group && GROUP_COLORS[ps.group]) ? GROUP_COLORS[ps.group] : '#888';
+          var mortCls = (pState && pState.mortgaged) ? ' mortgaged' : '';
+          var houses = pState ? (pState.houses || 0) : 0;
+          var houseStr = '';
+          if (houses === 5) houseStr = 'H';
+          else if (houses > 0) houseStr = '' + houses;
+          html += '<span class="player-prop-dot' + mortCls + '" style="background:' + pColor + ';" title="' + escHtml(ps.name) + (houses > 0 ? ' (' + (houses === 5 ? 'Hotel' : houses + 'h') + ')' : '') + '">' + houseStr + '</span>';
+        }
       }
       html += '</div>';
     }
@@ -2574,7 +2575,6 @@ MonopolyClient.prototype.renderPlayerCards = function() {
 };
 
 MonopolyClient.prototype.renderPropertyOwnership = function() {
-  // Add owner indicators and house markers on board spaces
   for (var pos = 0; pos < 40; pos++) {
     var spaceEl = document.getElementById('space-' + pos);
     if (!spaceEl) continue;
@@ -2582,7 +2582,7 @@ MonopolyClient.prototype.renderPropertyOwnership = function() {
     // Remove old indicators
     var oldOwner = spaceEl.querySelector('.owner-indicator');
     if (oldOwner) oldOwner.remove();
-    var oldHouses = spaceEl.querySelector('.house-indicator');
+    var oldHouses = spaceEl.querySelector('.house-dots');
     if (oldHouses) oldHouses.remove();
 
     var ps = this.engine.propertyState[pos];
@@ -2592,22 +2592,24 @@ MonopolyClient.prototype.renderPropertyOwnership = function() {
       var color = PLAYER_COLORS[ps.owner] || '#888';
       var ownerDot = document.createElement('div');
       ownerDot.className = 'owner-indicator';
-      ownerDot.style.cssText = 'position:absolute;bottom:2px;right:2px;width:8px;height:8px;border-radius:50%;background:' + color + ';border:1px solid rgba(255,255,255,0.5);z-index:4;';
-      if (ps.mortgaged) ownerDot.style.opacity = '0.3';
-      spaceEl.style.position = 'relative';
+      ownerDot.style.background = color;
+      if (ps.mortgaged) ownerDot.classList.add('mortgaged');
       spaceEl.appendChild(ownerDot);
     }
 
     if (ps.houses > 0) {
       var hDiv = document.createElement('div');
-      hDiv.className = 'house-indicator';
-      hDiv.style.cssText = 'position:absolute;top:2px;right:2px;font-size:10px;z-index:4;';
+      hDiv.className = 'house-dots';
       if (ps.houses === 5) {
-        hDiv.textContent = '🏨';
+        var hotel = document.createElement('span');
+        hotel.className = 'hotel-dot';
+        hDiv.appendChild(hotel);
       } else {
-        var hStr = '';
-        for (var h = 0; h < ps.houses; h++) hStr += '🏠';
-        hDiv.textContent = hStr;
+        for (var h = 0; h < ps.houses; h++) {
+          var hDot = document.createElement('span');
+          hDot.className = 'house-dot';
+          hDiv.appendChild(hDot);
+        }
       }
       spaceEl.appendChild(hDiv);
     }
@@ -2618,18 +2620,43 @@ MonopolyClient.prototype.renderTurnBanner = function() {
   var cp = this.engine.currentPlayer();
   if (!cp) return;
   var ch = getCharacter(cp.characterId);
+  var color = cp.color || PLAYER_COLORS[cp.seatIndex];
   var tokenEl = $('#turn-token');
   var nameEl = $('#turn-player-name');
+  var banner = $('#your-turn-banner');
+  var waitEl = $('#waiting-text');
+
   if (tokenEl) {
     tokenEl.textContent = ch ? ch.emoji : (cp.seatIndex + 1);
-    tokenEl.style.background = cp.color || PLAYER_COLORS[cp.seatIndex];
-    tokenEl.style.color = '#fff';
+    tokenEl.style.background = color;
   }
   if (nameEl) {
     nameEl.textContent = cp.name + (cp.seatIndex === this.mySeat ? ' (You)' : '');
-    nameEl.style.color = cp.color || PLAYER_COLORS[cp.seatIndex];
-    nameEl.style.fontSize = '16px';
-    nameEl.style.fontWeight = '700';
+    nameEl.style.color = color;
+  }
+
+  var isMyTurn = (cp.seatIndex === this.mySeat);
+
+  if (banner) {
+    if (isMyTurn && !this._turnBannerShown) {
+      this._turnBannerShown = true;
+      banner.classList.add('show');
+      sfx('turn');
+      setTimeout(function() { banner.classList.remove('show'); }, 2500);
+    } else if (!isMyTurn) {
+      this._turnBannerShown = false;
+      banner.classList.remove('show');
+    }
+  }
+
+  if (waitEl) {
+    if (isMyTurn) {
+      waitEl.textContent = 'Your turn!';
+      waitEl.style.color = '#2ecc71';
+    } else {
+      waitEl.textContent = 'Waiting for ' + cp.name + '...';
+      waitEl.style.color = '#aaa';
+    }
   }
 };
 
@@ -2663,6 +2690,106 @@ MonopolyClient.prototype.updateButtons = function() {
   tradeBtn.disabled = false;
 };
 
+/* ────────── SPACE TOOLTIPS ────────── */
+MonopolyClient.prototype._setupSpaceTooltips = function() {
+  var self = this;
+  var tooltip = $('#space-tooltip');
+  if (!tooltip) return;
+  if (this._tooltipsAttached) return;
+  this._tooltipsAttached = true;
+
+  var spaces = $$('.space[data-pos]');
+  for (var i = 0; i < spaces.length; i++) {
+    (function(spaceEl) {
+      spaceEl.addEventListener('mouseenter', function(e) {
+        var pos = parseInt(spaceEl.getAttribute('data-pos'), 10);
+        if (isNaN(pos)) return;
+        var space = BOARD_DATA[pos];
+        if (!space) return;
+
+        var html = '<div class="tooltip-name">' + escHtml(space.name) + '</div>';
+
+        if (space.price) {
+          html += '<div class="tooltip-price">Price: $' + space.price + '</div>';
+        }
+
+        var ps = self.engine.propertyState[pos];
+        if (ps && ps.owner !== null && ps.owner !== undefined) {
+          var ownerP = self.engine.getPlayer(ps.owner);
+          var ownerColor = PLAYER_COLORS[ps.owner] || '#888';
+          html += '<div class="tooltip-owner"><span class="tooltip-owner-dot" style="background:' + ownerColor + ';"></span>' + escHtml(ownerP ? ownerP.name : 'Player ' + (ps.owner + 1)) + '</div>';
+
+          if (ps.mortgaged) {
+            html += '<div class="tooltip-mortgaged">MORTGAGED</div>';
+          } else {
+            var rent = self.engine.calculateRent(pos, 7);
+            html += '<div class="tooltip-rent">Rent: $' + rent + '</div>';
+          }
+
+          if (ps.houses > 0) {
+            if (ps.houses === 5) {
+              html += '<div class="tooltip-houses">🏨 Hotel</div>';
+            } else {
+              html += '<div class="tooltip-houses">' + ps.houses + ' house' + (ps.houses > 1 ? 's' : '') + '</div>';
+            }
+          }
+        } else if (space.price) {
+          html += '<div class="tooltip-unowned">Unowned</div>';
+          if (space.rent) {
+            html += '<div class="tooltip-rent">Base rent: $' + space.rent[0] + '</div>';
+          }
+        }
+
+        tooltip.innerHTML = html;
+        tooltip.style.display = 'block';
+
+        var rect = spaceEl.getBoundingClientRect();
+        var tx = rect.left + rect.width / 2;
+        var ty = rect.top - 8;
+        tooltip.style.left = tx + 'px';
+        tooltip.style.top = ty + 'px';
+        tooltip.style.transform = 'translate(-50%, -100%)';
+      });
+
+      spaceEl.addEventListener('mouseleave', function() {
+        tooltip.style.display = 'none';
+      });
+    })(spaces[i]);
+  }
+};
+
+/* ────────── FLOATING TEXT ────────── */
+MonopolyClient.prototype.showFloatingText = function(text, x, y, color) {
+  var container = $('#floating-text-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'floating-text-container';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;';
+    document.body.appendChild(container);
+  }
+  var el = document.createElement('div');
+  el.className = 'floating-text';
+  el.textContent = text;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  if (color) el.style.color = color;
+  container.appendChild(el);
+  setTimeout(function() {
+    if (el.parentNode) el.parentNode.removeChild(el);
+  }, 1500);
+};
+
+/* ────────── FLASH MONEY ────────── */
+MonopolyClient.prototype.flashMoney = function(seatIndex, amount) {
+  var card = document.querySelector('.player-card[data-seat="' + seatIndex + '"]');
+  if (!card) return;
+  var cls = amount >= 0 ? 'flash-gain' : 'flash-loss';
+  card.classList.add(cls);
+  setTimeout(function() {
+    card.classList.remove(cls);
+  }, 700);
+};
+
 /* ────────── STATE SYNC ────────── */
 MonopolyClient.prototype.syncState = function() {
   // BUG FIX #5: Include ALL engine state
@@ -2681,8 +2808,8 @@ MonopolyClient.prototype.addLog = function(msg) {
   var now = new Date();
   var time = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
   var div = document.createElement('div');
-  div.style.cssText = 'font-size:12px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);';
-  div.innerHTML = '<span style="color:#666;font-size:10px;">[' + time + ']</span> ' + escHtml(msg);
+  div.className = 'log-entry';
+  div.innerHTML = '<span class="log-time">[' + time + ']</span> ' + escHtml(msg);
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 };
