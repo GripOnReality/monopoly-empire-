@@ -12,6 +12,20 @@ function saveSession(key, val) { try { localStorage.setItem(key, JSON.stringify(
 function loadSession(key) { try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch(e){ return null; } }
 function clearSession(key) { try { localStorage.removeItem(key); } catch(e){} }
 
+/* Victory MP3 */
+var _victoryAudio = null;
+function playVictoryMusic() {
+  try {
+    if (!_victoryAudio) _victoryAudio = new Audio('victory.mp3');
+    _victoryAudio.currentTime = 0;
+    _victoryAudio.volume = 0.7;
+    _victoryAudio.play().catch(function(){});
+  } catch(e){}
+}
+function stopVictoryMusic() {
+  try { if (_victoryAudio) { _victoryAudio.pause(); _victoryAudio.currentTime = 0; } } catch(e){}
+}
+
 var _toastTimer = null;
 function showToast(message, type) {
   var el = $('#toast');
@@ -2142,7 +2156,7 @@ MonopolyClient.prototype.checkBankrupt = function(player, creditorSeat) {
 
 /* ── GAME OVER MODAL ── */
 MonopolyClient.prototype.showGameOverModal = function(winner) {
-  sfx('win');
+  playVictoryMusic();
   var ch = getCharacter(winner.characterId);
   $('#gameover-winner-token').textContent = ch ? ch.emoji : ('P' + (winner.seatIndex + 1));
   $('#gameover-winner-token').style.background = winner.color || PLAYER_COLORS[winner.seatIndex];
@@ -2378,6 +2392,7 @@ MonopolyClient.prototype._bindGameButtons = function() {
 
   // Game over
   $('#btn-new-game').addEventListener('click', function() {
+    stopVictoryMusic();
     clearSession('monopoly-session');
     window.location.reload();
   });
