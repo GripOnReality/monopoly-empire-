@@ -1,1589 +1,2633 @@
-/* ============================================================
-   MONOPOLY GAME CLIENT - game.js
-   Complete multiplayer Monopoly with Socket.IO state sync
-   ============================================================ */
+/* ═══════════════════════════════════════════════════════════════
+   MONOPOLY EMPIRE — game.js  (full rewrite)
+   ═══════════════════════════════════════════════════════════════ */
 
-// --- DOM Helpers ---
-const $ = (sel, ctx = document) => ctx.querySelector(sel);
-const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+/* ──────────────────────────────────────
+   1. HELPERS & GLOBALS
+   ────────────────────────────────────── */
+function $(sel) { return document.querySelector(sel); }
+function $$(sel) { return document.querySelectorAll(sel); }
 
-// --- Session Persistence ---
-function saveSession(data) {
-  try { localStorage.setItem('monopoly_session', JSON.stringify(data)); } catch (e) { /* ignore */ }
-}
-function loadSession() {
-  try { return JSON.parse(localStorage.getItem('monopoly_session')); } catch (e) { return null; }
-}
-function clearSession() {
-  try { localStorage.removeItem('monopoly_session'); } catch (e) { /* ignore */ }
-}
+function saveSession(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch(e){} }
+function loadSession(key) { try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch(e){ return null; } }
+function clearSession(key) { try { localStorage.removeItem(key); } catch(e){} }
 
-// --- Toast ---
-function showToast(msg, duration) {
-  if (duration === undefined) duration = 3000;
-  var t = document.createElement('div');
-  t.className = 'toast';
-  t.textContent = msg;
-  Object.assign(t.style, {
-    position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-    background: '#222', color: '#fff', padding: '10px 24px', borderRadius: '8px',
-    zIndex: '10000', fontSize: '14px', boxShadow: '0 4px 16px rgba(0,0,0,.3)',
-    pointerEvents: 'none', transition: 'opacity .3s'
-  });
-  document.body.appendChild(t);
-  setTimeout(function () { t.style.opacity = '0'; setTimeout(function () { t.remove(); }, 300); }, duration);
+var _toastTimer = null;
+function showToast(message, type) {
+  var el = $('#toast');
+  if (!el) return;
+  el.textContent = message;
+  el.className = "toast show" + (type ? " toast-" + type : "");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() { el.className = "toast"; }, 3500);
 }
 
-// --- Screen Switcher ---
 function showScreen(id) {
-  $$('.screen').forEach(function (s) { s.classList.remove('active'); });
-  var el = document.getElementById(id);
-  if (el) el.classList.add('active');
+  var screens = $$('.screen');
+  for (var i = 0; i < screens.length; i++) screens[i].classList.remove("active");
+  var target = document.getElementById(id);
+  if (target) target.classList.add("active");
 }
 
-// --- Player Colors & Tokens ---
-var PLAYER_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
-
-function makeToken(seatIndex, small) {
-  var d = document.createElement('div');
-  d.className = 'player-token' + (small ? ' token-small' : '');
-  var sz = small ? 18 : 24;
-  Object.assign(d.style, {
-    width: sz + 'px', height: sz + 'px', borderRadius: '50%',
-    background: PLAYER_COLORS[seatIndex] || '#888',
-    color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: (small ? 10 : 12) + 'px', fontWeight: 'bold',
-    border: '2px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,.4)',
-    lineHeight: '1', flexShrink: '0', margin: '1px'
-  });
-  d.textContent = String(seatIndex + 1);
-  d.dataset.seat = seatIndex;
-  return d;
-}
-
-// --- HTML escape helper ---
 function escHtml(str) {
-  var d = document.createElement('div');
-  d.textContent = str || '';
+  var d = document.createElement("div");
+  d.appendChild(document.createTextNode(str));
   return d.innerHTML;
 }
 
-// ================================================================
-//  BOARD DATA (Standard US Monopoly – 40 spaces)
-// ================================================================
-var BOARD_DATA = [
-  { pos: 0,  name: 'GO',                    type: 'go' },
-  { pos: 1,  name: 'Mediterranean Avenue',  type: 'property', group: 'brown',     price: 60,  rent: [2,10,30,90,160,250],     houseCost: 50,  mortgage: 30 },
-  { pos: 2,  name: 'Community Chest',       type: 'chest' },
-  { pos: 3,  name: 'Baltic Avenue',         type: 'property', group: 'brown',     price: 60,  rent: [4,20,60,180,320,450],     houseCost: 50,  mortgage: 30 },
-  { pos: 4,  name: 'Income Tax',            type: 'tax', amount: 200 },
-  { pos: 5,  name: 'Reading Railroad',      type: 'railroad', price: 200, mortgage: 100 },
-  { pos: 6,  name: 'Oriental Avenue',       type: 'property', group: 'lightblue', price: 100, rent: [6,30,90,270,400,550],     houseCost: 50,  mortgage: 50 },
-  { pos: 7,  name: 'Chance',                type: 'chance' },
-  { pos: 8,  name: 'Vermont Avenue',        type: 'property', group: 'lightblue', price: 100, rent: [6,30,90,270,400,550],     houseCost: 50,  mortgage: 50 },
-  { pos: 9,  name: 'Connecticut Avenue',    type: 'property', group: 'lightblue', price: 120, rent: [8,40,100,300,450,600],    houseCost: 50,  mortgage: 60 },
-  { pos: 10, name: 'Jail / Just Visiting',  type: 'jail' },
-  { pos: 11, name: 'St. Charles Place',     type: 'property', group: 'pink',      price: 140, rent: [10,50,150,450,625,750],   houseCost: 100, mortgage: 70 },
-  { pos: 12, name: 'Electric Company',      type: 'utility',  price: 150, mortgage: 75 },
-  { pos: 13, name: 'States Avenue',         type: 'property', group: 'pink',      price: 140, rent: [10,50,150,450,625,750],   houseCost: 100, mortgage: 70 },
-  { pos: 14, name: 'Virginia Avenue',       type: 'property', group: 'pink',      price: 160, rent: [12,60,180,500,700,900],   houseCost: 100, mortgage: 80 },
-  { pos: 15, name: 'Pennsylvania Railroad', type: 'railroad', price: 200, mortgage: 100 },
-  { pos: 16, name: 'St. James Place',       type: 'property', group: 'orange',    price: 180, rent: [14,70,200,550,750,950],   houseCost: 100, mortgage: 90 },
-  { pos: 17, name: 'Community Chest',       type: 'chest' },
-  { pos: 18, name: 'Tennessee Avenue',      type: 'property', group: 'orange',    price: 180, rent: [14,70,200,550,750,950],   houseCost: 100, mortgage: 90 },
-  { pos: 19, name: 'New York Avenue',       type: 'property', group: 'orange',    price: 200, rent: [16,80,220,600,800,1000],  houseCost: 100, mortgage: 100 },
-  { pos: 20, name: 'Free Parking',          type: 'free-parking' },
-  { pos: 21, name: 'Kentucky Avenue',       type: 'property', group: 'red',       price: 220, rent: [18,90,250,700,875,1050],  houseCost: 150, mortgage: 110 },
-  { pos: 22, name: 'Chance',                type: 'chance' },
-  { pos: 23, name: 'Indiana Avenue',        type: 'property', group: 'red',       price: 220, rent: [18,90,250,700,875,1050],  houseCost: 150, mortgage: 110 },
-  { pos: 24, name: 'Illinois Avenue',       type: 'property', group: 'red',       price: 240, rent: [20,100,300,750,925,1100], houseCost: 150, mortgage: 120 },
-  { pos: 25, name: 'B&O Railroad',          type: 'railroad', price: 200, mortgage: 100 },
-  { pos: 26, name: 'Atlantic Avenue',       type: 'property', group: 'yellow',    price: 260, rent: [22,110,330,800,975,1150], houseCost: 150, mortgage: 130 },
-  { pos: 27, name: 'Ventnor Avenue',        type: 'property', group: 'yellow',    price: 260, rent: [22,110,330,800,975,1150], houseCost: 150, mortgage: 130 },
-  { pos: 28, name: 'Water Works',           type: 'utility',  price: 150, mortgage: 75 },
-  { pos: 29, name: 'Marvin Gardens',        type: 'property', group: 'yellow',    price: 280, rent: [24,120,360,850,1025,1200],houseCost: 150, mortgage: 140 },
-  { pos: 30, name: 'Go To Jail',            type: 'go-to-jail' },
-  { pos: 31, name: 'Pacific Avenue',        type: 'property', group: 'green',     price: 300, rent: [26,130,390,900,1100,1275],houseCost: 200, mortgage: 150 },
-  { pos: 32, name: 'North Carolina Avenue', type: 'property', group: 'green',     price: 300, rent: [26,130,390,900,1100,1275],houseCost: 200, mortgage: 150 },
-  { pos: 33, name: 'Community Chest',       type: 'chest' },
-  { pos: 34, name: 'Pennsylvania Avenue',   type: 'property', group: 'green',     price: 320, rent: [28,150,450,1000,1200,1400],houseCost: 200,mortgage: 160 },
-  { pos: 35, name: 'Short Line',            type: 'railroad', price: 200, mortgage: 100 },
-  { pos: 36, name: 'Chance',                type: 'chance' },
-  { pos: 37, name: 'Park Place',            type: 'property', group: 'darkblue',  price: 350, rent: [35,175,500,1100,1300,1500],houseCost: 200,mortgage: 175 },
-  { pos: 38, name: 'Luxury Tax',            type: 'tax', amount: 100 },
-  { pos: 39, name: 'Boardwalk',             type: 'property', group: 'darkblue',  price: 400, rent: [50,200,600,1400,1700,2000],houseCost: 200,mortgage: 200 }
-];
+function sfx(name) { if (window.SFX) SFX.play(name); }
 
-// Color-group membership lookup
-var COLOR_GROUPS = {};
-BOARD_DATA.forEach(function (s) {
-  if (s.group) {
-    if (!COLOR_GROUPS[s.group]) COLOR_GROUPS[s.group] = [];
-    COLOR_GROUPS[s.group].push(s.pos);
-  }
-});
-var RAILROAD_POSITIONS = [5, 15, 25, 35];
-var UTILITY_POSITIONS  = [12, 28];
-
-// ================================================================
-//  CHANCE CARDS
-// ================================================================
-var CHANCE_CARDS = [
-  { text: 'Advance to Boardwalk.', action: { type: 'move-to', dest: 39 } },
-  { text: 'Advance to Go. Collect $200.', action: { type: 'move-to', dest: 0 } },
-  { text: 'Advance to Illinois Avenue. If you pass Go, collect $200.', action: { type: 'move-to', dest: 24 } },
-  { text: 'Advance to St. Charles Place. If you pass Go, collect $200.', action: { type: 'move-to', dest: 11 } },
-  { text: 'Advance to the nearest Railroad. Pay owner twice the rental.', action: { type: 'nearest-railroad-2x' } },
-  { text: 'Advance to the nearest Railroad. Pay owner twice the rental.', action: { type: 'nearest-railroad-2x' } },
-  { text: 'Advance to the nearest Utility. If unowned you may buy it; if owned throw dice and pay owner 10\u00d7 the amount thrown.', action: { type: 'nearest-utility-10x' } },
-  { text: 'Bank pays you dividend of $50.', action: { type: 'collect', amount: 50 } },
-  { text: 'Get Out of Jail Free.', action: { type: 'get-out-of-jail' } },
-  { text: 'Go Back 3 Spaces.', action: { type: 'move-back', spaces: 3 } },
-  { text: 'Go to Jail. Do not pass Go, do not collect $200.', action: { type: 'go-to-jail' } },
-  { text: 'Make general repairs on all your property: $25 per house, $100 per hotel.', action: { type: 'repairs', perHouse: 25, perHotel: 100 } },
-  { text: 'Speeding fine $15.', action: { type: 'pay', amount: 15 } },
-  { text: 'Take a trip to Reading Railroad. If you pass Go, collect $200.', action: { type: 'move-to', dest: 5 } },
-  { text: 'You have been elected Chairman of the Board. Pay each player $50.', action: { type: 'pay-each', amount: 50 } },
-  { text: 'Your building loan matures. Collect $150.', action: { type: 'collect', amount: 150 } }
-];
-
-// ================================================================
-//  COMMUNITY CHEST CARDS
-// ================================================================
-var COMMUNITY_CHEST = [
-  { text: 'Advance to Go. Collect $200.', action: { type: 'move-to', dest: 0 } },
-  { text: 'Bank error in your favor. Collect $200.', action: { type: 'collect', amount: 200 } },
-  { text: "Doctor\u2019s fees. Pay $50.", action: { type: 'pay', amount: 50 } },
-  { text: 'From sale of stock you get $50.', action: { type: 'collect', amount: 50 } },
-  { text: 'Get Out of Jail Free.', action: { type: 'get-out-of-jail' } },
-  { text: 'Go to Jail. Do not pass Go, do not collect $200.', action: { type: 'go-to-jail' } },
-  { text: 'Holiday fund matures. Receive $100.', action: { type: 'collect', amount: 100 } },
-  { text: 'Income tax refund. Collect $20.', action: { type: 'collect', amount: 20 } },
-  { text: 'It is your birthday. Collect $10 from every player.', action: { type: 'collect-each', amount: 10 } },
-  { text: 'Life insurance matures. Collect $100.', action: { type: 'collect', amount: 100 } },
-  { text: 'Pay hospital fees of $100.', action: { type: 'pay', amount: 100 } },
-  { text: 'Pay school fees of $50.', action: { type: 'pay', amount: 50 } },
-  { text: 'Receive $25 consultancy fee.', action: { type: 'collect', amount: 25 } },
-  { text: 'You are assessed for street repairs: $40 per house, $115 per hotel.', action: { type: 'repairs', perHouse: 40, perHotel: 115 } },
-  { text: 'You have won second prize in a beauty contest. Collect $10.', action: { type: 'collect', amount: 10 } },
-  { text: 'You inherit $100.', action: { type: 'collect', amount: 100 } }
-];
-
-// --- Shuffle helper ---
-function shuffle(arr) {
+function shuffleArray(arr) {
   var a = arr.slice();
   for (var i = a.length - 1; i > 0; i--) {
     var j = Math.floor(Math.random() * (i + 1));
-    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    var t = a[i]; a[i] = a[j]; a[j] = t;
   }
   return a;
 }
 
-// ================================================================
-//  MONOPOLY ENGINE  (runs client-side on the active-turn player)
-// ================================================================
+var PLAYER_COLORS = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c"];
+
+var CHARACTERS = [
+  { id: "tophat", emoji: "\U0001f3a9", name: "Top Hat" },
+  { id: "car", emoji: "\U0001f697", name: "Race Car" },
+  { id: "dog", emoji: "\U0001f415", name: "Good Boy" },
+  { id: "boot", emoji: "\U0001f462", name: "Boot" },
+  { id: "rocket", emoji: "\U0001f680", name: "Rocket" },
+  { id: "diamond", emoji: "\U0001f48e", name: "Diamond" }
+];
+
+function getCharacter(id) {
+  for (var i = 0; i < CHARACTERS.length; i++) {
+    if (CHARACTERS[i].id === id) return CHARACTERS[i];
+  }
+  return null;
+}
+
+var GROUP_COLORS = {
+  brown: "#8B4513", lightblue: "#87CEEB", pink: "#FF69B4",
+  orange: "#FF8C00", red: "#e74c3c", yellow: "#FFD700",
+  green: "#2ecc71", darkblue: "#0000CD"
+};
+
+/* ──────────────────────────────────────
+   2. BOARD DATA
+   ────────────────────────────────────── */
+var BOARD_DATA = [
+  {pos:0, name:'GO', type:'go'},
+  {pos:1, name:'Broke Boulevard', type:'property', group:'brown', price:60, rent:[2,10,30,90,160,250], houseCost:50, mortgage:30},
+  {pos:2, name:'Community Chest', type:'chest'},
+  {pos:3, name:'Ramen Row', type:'property', group:'brown', price:60, rent:[4,20,60,180,320,450], houseCost:50, mortgage:30},
+  {pos:4, name:'Income Tax', type:'tax', price:200},
+  {pos:5, name:'Midnight Express', type:'railroad', price:200, mortgage:100},
+  {pos:6, name:'Thrift Lane', type:'property', group:'lightblue', price:100, rent:[6,30,90,270,400,550], houseCost:50, mortgage:50},
+  {pos:7, name:'Chance', type:'chance'},
+  {pos:8, name:'Flea Market Ave', type:'property', group:'lightblue', price:100, rent:[6,30,90,270,400,550], houseCost:50, mortgage:50},
+  {pos:9, name:'Garage Sale Ct', type:'property', group:'lightblue', price:120, rent:[8,40,100,300,450,600], houseCost:50, mortgage:60},
+  {pos:10, name:'Jail', type:'jail'},
+  {pos:11, name:'Neon Strip', type:'property', group:'pink', price:140, rent:[10,50,150,450,625,750], houseCost:100, mortgage:70},
+  {pos:12, name:'Volt Works', type:'utility', price:150, mortgage:75},
+  {pos:13, name:'Lipstick Lane', type:'property', group:'pink', price:140, rent:[10,50,150,450,625,750], houseCost:100, mortgage:70},
+  {pos:14, name:'Velvet Lounge', type:'property', group:'pink', price:160, rent:[12,60,180,500,700,900], houseCost:100, mortgage:80},
+  {pos:15, name:'Thunder Rail', type:'railroad', price:200, mortgage:100},
+  {pos:16, name:'Taco Terrace', type:'property', group:'orange', price:180, rent:[14,70,200,550,750,950], houseCost:100, mortgage:90},
+  {pos:17, name:'Community Chest', type:'chest'},
+  {pos:18, name:'Salsa Street', type:'property', group:'orange', price:180, rent:[14,70,200,550,750,950], houseCost:100, mortgage:90},
+  {pos:19, name:'Fiesta Plaza', type:'property', group:'orange', price:200, rent:[16,80,220,600,800,1000], houseCost:100, mortgage:100},
+  {pos:20, name:'Free Parking', type:'free-parking'},
+  {pos:21, name:'Crimson Court', type:'property', group:'red', price:220, rent:[18,90,250,700,875,1050], houseCost:150, mortgage:110},
+  {pos:22, name:'Chance', type:'chance'},
+  {pos:23, name:'Scarlet Row', type:'property', group:'red', price:220, rent:[18,90,250,700,875,1050], houseCost:150, mortgage:110},
+  {pos:24, name:'Inferno Ave', type:'property', group:'red', price:240, rent:[20,100,300,750,925,1100], houseCost:150, mortgage:120},
+  {pos:25, name:'Ghost Line', type:'railroad', price:200, mortgage:100},
+  {pos:26, name:'Gold Rush Blvd', type:'property', group:'yellow', price:260, rent:[22,110,330,800,975,1150], houseCost:150, mortgage:130},
+  {pos:27, name:'Sunburn Strip', type:'property', group:'yellow', price:260, rent:[22,110,330,800,975,1150], houseCost:150, mortgage:130},
+  {pos:28, name:'Aqua Pipes', type:'utility', price:150, mortgage:75},
+  {pos:29, name:'Lemon Drop Ln', type:'property', group:'yellow', price:280, rent:[24,120,360,850,1025,1200], houseCost:150, mortgage:140},
+  {pos:30, name:'Go To Jail', type:'go-to-jail'},
+  {pos:31, name:'Emerald Heights', type:'property', group:'green', price:300, rent:[26,130,390,900,1100,1275], houseCost:200, mortgage:150},
+  {pos:32, name:'Jade Terrace', type:'property', group:'green', price:300, rent:[26,130,390,900,1100,1275], houseCost:200, mortgage:150},
+  {pos:33, name:'Community Chest', type:'chest'},
+  {pos:34, name:'Forest Manor', type:'property', group:'green', price:320, rent:[28,150,450,1000,1200,1400], houseCost:200, mortgage:160},
+  {pos:35, name:'Phantom Express', type:'railroad', price:200, mortgage:100},
+  {pos:36, name:'Chance', type:'chance'},
+  {pos:37, name:'Royal Row', type:'property', group:'darkblue', price:350, rent:[35,175,500,1100,1300,1500], houseCost:200, mortgage:175},
+  {pos:38, name:'Luxury Tax', type:'tax', price:100},
+  {pos:39, name:'Empire Tower', type:'property', group:'darkblue', price:400, rent:[50,200,600,1400,1700,2000], houseCost:200, mortgage:200}
+];
+
+var COLOR_GROUPS = {};
+(function() {
+  for (var i = 0; i < BOARD_DATA.length; i++) {
+    var s = BOARD_DATA[i];
+    if (s.group) {
+      if (!COLOR_GROUPS[s.group]) COLOR_GROUPS[s.group] = [];
+      COLOR_GROUPS[s.group].push(s.pos);
+    }
+  }
+})();
+
+/* ──────────────────────────────────────
+   3. CARDS
+   ────────────────────────────────────── */
+var CHANCE_CARDS = [
+  { text: 'Advance to GO. Collect $200.', action: 'move-to', data: { pos: 0, collectGo: true } },
+  { text: 'Advance to Inferno Ave. If you pass GO collect $200.', action: 'move-to', data: { pos: 24, collectGo: true } },
+  { text: 'Advance to Neon Strip. If you pass GO collect $200.', action: 'move-to', data: { pos: 11, collectGo: true } },
+  { text: 'Advance to Midnight Express. If you pass GO collect $200.', action: 'move-to', data: { pos: 5, collectGo: true } },
+  { text: 'Advance to the nearest Railroad. Pay owner double rent.', action: 'nearest-railroad', data: {} },
+  { text: 'Advance to the nearest Utility. Pay 10x dice if owned.', action: 'nearest-utility', data: {} },
+  { text: 'Bank pays you dividend of $50.', action: 'collect', data: { amount: 50 } },
+  { text: 'Get Out of Jail Free!', action: 'jail-card', data: {} },
+  { text: 'Go back 3 spaces.', action: 'move-back', data: { spaces: 3 } },
+  { text: 'Go directly to Jail. Do not pass GO.', action: 'go-to-jail', data: {} },
+  { text: 'Make repairs on Taco Terrace & friends: $25 per house, $100 per hotel.', action: 'repairs', data: { perHouse: 25, perHotel: 100 } },
+  { text: 'Pay poor tax of $15.', action: 'pay', data: { amount: 15 } },
+  { text: 'Take a trip to Thunder Rail. If you pass GO collect $200.', action: 'move-to', data: { pos: 15, collectGo: true } },
+  { text: 'You won a crossword competition! Collect $100.', action: 'collect', data: { amount: 100 } },
+  { text: 'Your Empire stocks pay off. Collect $150.', action: 'collect', data: { amount: 150 } },
+  { text: 'Street repairs assessment: $40 per house, $115 per hotel.', action: 'repairs', data: { perHouse: 40, perHotel: 115 } }
+];
+
+var COMMUNITY_CHEST = [
+  { text: 'Advance to GO. Collect $200.', action: 'move-to', data: { pos: 0, collectGo: true } },
+  { text: 'Bank error in your favor. Collect $200.', action: 'collect', data: { amount: 200 } },
+  { text: "Doctor's fee. Pay $50.", action: 'pay', data: { amount: 50 } },
+  { text: 'From sale of Ramen Row stock you get $50.', action: 'collect', data: { amount: 50 } },
+  { text: 'Get Out of Jail Free!', action: 'jail-card', data: {} },
+  { text: 'Go directly to Jail. Do not pass GO.', action: 'go-to-jail', data: {} },
+  { text: 'Grand Opera Night at Velvet Lounge. Collect $50 from every player.', action: 'collect-from-all', data: { amount: 50 } },
+  { text: 'Holiday fund matures. Collect $100.', action: 'collect', data: { amount: 100 } },
+  { text: 'Income tax refund. Collect $20.', action: 'collect', data: { amount: 20 } },
+  { text: "It's your birthday! Collect $10 from every player.", action: 'collect-from-all', data: { amount: 10 } },
+  { text: 'Life insurance matures. Collect $100.', action: 'collect', data: { amount: 100 } },
+  { text: 'Hospital fees. Pay $100.', action: 'pay', data: { amount: 100 } },
+  { text: 'School fees. Pay $50.', action: 'pay', data: { amount: 50 } },
+  { text: 'Receive consultancy fee. Collect $25.', action: 'collect', data: { amount: 25 } },
+  { text: 'You inherit $100 from a mysterious relative.', action: 'collect', data: { amount: 100 } },
+  { text: 'You won second prize in a beauty contest! Collect $10.', action: 'collect', data: { amount: 10 } }
+];
+
+/* ──────────────────────────────────────
+   4. TOKEN RENDERING
+   ────────────────────────────────────── */
+function makeToken(seatIndex, characterId) {
+  var div = document.createElement('div');
+  div.className = 'board-token';
+  div.setAttribute('data-seat', seatIndex);
+  var ch = getCharacter(characterId);
+  if (ch) {
+    div.textContent = ch.emoji;
+    div.style.fontSize = '16px';
+  } else {
+    div.textContent = (seatIndex + 1);
+  }
+  div.style.background = PLAYER_COLORS[seatIndex] || '#888';
+  div.style.color = '#fff';
+  div.style.width = '24px';
+  div.style.height = '24px';
+  div.style.borderRadius = '50%';
+  div.style.display = 'inline-flex';
+  div.style.alignItems = 'center';
+  div.style.justifyContent = 'center';
+  div.style.fontWeight = 'bold';
+  div.style.border = '2px solid rgba(255,255,255,0.7)';
+  div.style.boxShadow = '0 1px 3px rgba(0,0,0,0.4)';
+  div.style.position = 'relative';
+  div.style.zIndex = '5';
+  div.style.margin = '1px';
+  div.style.lineHeight = '1';
+  return div;
+}
+
+/* ──────────────────────────────────────
+   5. MONOPOLY ENGINE
+   ────────────────────────────────────── */
 function MonopolyEngine() {
   this.reset();
 }
 
-MonopolyEngine.prototype.reset = function () {
+MonopolyEngine.prototype.reset = function() {
   this.players = [];
   this.currentTurn = 0;
-  this.propertyState = {};      // pos -> {owner,houses,mortgaged}
+  this.propertyState = {};
   this.housesAvailable = 32;
   this.hotelsAvailable = 12;
   this.freeParkingPot = 0;
-  this.turnNumber = 0;
-  this.gamePhase = 'waiting';   // waiting|rolling|animating|landed|action|end
+  this.chanceDeck = shuffleArray(CHANCE_CARDS);
+  this.chestDeck = shuffleArray(COMMUNITY_CHEST);
+  this.chanceIdx = 0;
+  this.chestIdx = 0;
+  this.gamePhase = 'rolling';
   this.lastDice = { die1: 0, die2: 0, total: 0, doubles: false };
   this.doublesCount = 0;
-  this.chanceDeck = shuffle(CHANCE_CARDS);
-  this.chestDeck  = shuffle(COMMUNITY_CHEST);
-  this.chanceIndex = 0;
-  this.chestIndex  = 0;
+  this.turnNumber = 1;
 };
 
-/* ---------- state I/O ---------- */
-
-MonopolyEngine.prototype.initFromState = function (gs) {
-  if (!gs) return;
-  var self = this;
-  if (gs.currentTurn != null) this.currentTurn = gs.currentTurn;
-  this.players = (gs.players || []).map(function (p, i) {
-    return {
-      id: p.id, name: p.name,
-      seatIndex: p.seatIndex != null ? p.seatIndex : i,
-      color: p.color || PLAYER_COLORS[i],
-      position: p.position != null ? p.position : 0,
-      money: p.money != null ? p.money : 1500,
-      properties: p.properties ? p.properties.slice() : [],
-      inJail: !!p.inJail, jailTurns: p.jailTurns || 0,
-      getOutOfJailCards: p.getOutOfJailCards || 0,
-      bankrupt: !!p.bankrupt,
-      connected: p.connected != null ? p.connected : true
-    };
+MonopolyEngine.prototype.addPlayer = function(name, seatIndex, color, characterId) {
+  this.players.push({
+    seatIndex: seatIndex,
+    name: name,
+    money: 1500,
+    position: 0,
+    properties: [],
+    inJail: false,
+    jailTurns: 0,
+    getOutOfJailCards: 0,
+    bankrupt: false,
+    connected: true,
+    color: color || PLAYER_COLORS[seatIndex] || '#888',
+    characterId: characterId || null
   });
-  if (gs.propertyState)      this.propertyState  = JSON.parse(JSON.stringify(gs.propertyState));
-  if (gs.housesAvailable != null) this.housesAvailable = gs.housesAvailable;
-  if (gs.hotelsAvailable != null) this.hotelsAvailable = gs.hotelsAvailable;
-  if (gs.freeParkingPot  != null) this.freeParkingPot  = gs.freeParkingPot;
-  if (gs.turnNumber       != null) this.turnNumber      = gs.turnNumber;
-  if (gs.gamePhase)               this.gamePhase        = gs.gamePhase;
-  if (gs.lastDice)                this.lastDice         = gs.lastDice;
-  if (gs.doublesCount     != null) this.doublesCount     = gs.doublesCount;
-  if (gs.chanceDeck) { this.chanceDeck = gs.chanceDeck; this.chanceIndex = gs.chanceIndex || 0; }
-  if (gs.chestDeck)  { this.chestDeck  = gs.chestDeck;  this.chestIndex  = gs.chestIndex  || 0; }
 };
 
-MonopolyEngine.prototype.serialise = function () {
-  return {
-    currentTurn: this.currentTurn,
-    players: this.players.map(function (p) { var o = {}; for (var k in p) o[k] = p[k]; o.properties = p.properties.slice(); return o; }),
-    propertyState: JSON.parse(JSON.stringify(this.propertyState)),
-    housesAvailable: this.housesAvailable, hotelsAvailable: this.hotelsAvailable,
-    freeParkingPot: this.freeParkingPot, turnNumber: this.turnNumber,
-    gamePhase: this.gamePhase,
-    lastDice: { die1: this.lastDice.die1, die2: this.lastDice.die2, total: this.lastDice.total, doubles: this.lastDice.doubles },
-    doublesCount: this.doublesCount,
-    chanceDeck: this.chanceDeck, chanceIndex: this.chanceIndex,
-    chestDeck: this.chestDeck,   chestIndex: this.chestIndex
-  };
-};
-
-/* ---------- helpers ---------- */
-
-MonopolyEngine.prototype.getPlayer = function (seat) {
-  for (var i = 0; i < this.players.length; i++) if (this.players[i].seatIndex === seat) return this.players[i];
+MonopolyEngine.prototype.getPlayer = function(seat) {
+  for (var i = 0; i < this.players.length; i++) {
+    if (this.players[i].seatIndex === seat) return this.players[i];
+  }
   return null;
 };
-MonopolyEngine.prototype.currentPlayer = function () { return this.getPlayer(this.currentTurn); };
-MonopolyEngine.prototype.activePlayers = function () { return this.players.filter(function (p) { return !p.bankrupt; }); };
 
-/* ---------- movement ---------- */
+MonopolyEngine.prototype.currentPlayer = function() {
+  return this.getPlayer(this.currentTurn);
+};
 
-MonopolyEngine.prototype.movePlayer = function (seat, steps) {
+MonopolyEngine.prototype.activePlayers = function() {
+  var r = [];
+  for (var i = 0; i < this.players.length; i++) {
+    if (!this.players[i].bankrupt) r.push(this.players[i]);
+  }
+  return r;
+};
+
+MonopolyEngine.prototype.movePlayer = function(seat, steps) {
+  var p = this.getPlayer(seat);
+  if (!p) return { passedGo: false, newPos: 0 };
+  var oldPos = p.position;
+  var newPos = (oldPos + steps) % 40;
+  if (newPos < 0) newPos += 40;
+  var passedGo = (steps > 0) && (newPos < oldPos);
+  if (passedGo) {
+    p.money += 200;
+  }
+  p.position = newPos;
+  return { passedGo: passedGo, newPos: newPos };
+};
+
+MonopolyEngine.prototype.movePlayerTo = function(seat, dest, collectGo) {
   var p = this.getPlayer(seat);
   if (!p) return { passedGo: false };
   var oldPos = p.position;
-  var newPos = (oldPos + steps) % 40;
-  var passedGo = (oldPos + steps >= 40) && newPos !== 0;
-  p.position = newPos;
-  if (passedGo || (newPos === 0 && steps > 0)) p.money += 200;
-  return { passedGo: passedGo || (newPos === 0 && steps > 0), newPos: newPos };
-};
-
-MonopolyEngine.prototype.movePlayerTo = function (seat, dest, collectGo) {
-  var p = this.getPlayer(seat);
-  if (!p) return { passedGo: false };
-  var passedGo = collectGo && dest < p.position && dest !== p.position;
+  var passedGo = false;
+  if (collectGo && dest < oldPos && dest !== oldPos) {
+    p.money += 200;
+    passedGo = true;
+  }
   p.position = dest;
-  if (passedGo) p.money += 200;
   return { passedGo: passedGo };
 };
 
-MonopolyEngine.prototype.sendToJail = function (seat) {
-  var p = this.getPlayer(seat); if (!p) return;
-  p.position = 10; p.inJail = true; p.jailTurns = 0;
+MonopolyEngine.prototype.sendToJail = function(seat) {
+  var p = this.getPlayer(seat);
+  if (!p) return;
+  p.position = 10;
+  p.inJail = true;
+  p.jailTurns = 0;
 };
 
-/* ---------- property queries ---------- */
-
-MonopolyEngine.prototype.getPropertyOwner = function (pos) {
-  var ps = this.propertyState[pos]; return ps ? ps.owner : null;
+MonopolyEngine.prototype.getPropertyOwner = function(pos) {
+  var ps = this.propertyState[pos];
+  if (ps && ps.owner !== undefined && ps.owner !== null) return ps.owner;
+  return null;
 };
 
-MonopolyEngine.prototype.ownsFullGroup = function (seat, group) {
-  var positions = COLOR_GROUPS[group]; if (!positions) return false;
-  var self = this;
-  return positions.every(function (p) { var ps = self.propertyState[p]; return ps && ps.owner === seat; });
+MonopolyEngine.prototype.ownsFullGroup = function(seat, group) {
+  var positions = COLOR_GROUPS[group];
+  if (!positions) return false;
+  for (var i = 0; i < positions.length; i++) {
+    if (this.getPropertyOwner(positions[i]) !== seat) return false;
+  }
+  return true;
 };
 
-MonopolyEngine.prototype.getOwnedRailroadCount = function (seat) {
-  var self = this;
-  return RAILROAD_POSITIONS.filter(function (p) { var ps = self.propertyState[p]; return ps && ps.owner === seat && !ps.mortgaged; }).length;
+MonopolyEngine.prototype.getOwnedRailroadCount = function(seat) {
+  var rr = [5, 15, 25, 35];
+  var count = 0;
+  for (var i = 0; i < rr.length; i++) {
+    var ps = this.propertyState[rr[i]];
+    if (ps && ps.owner === seat && !ps.mortgaged) count++;
+  }
+  return count;
 };
 
-MonopolyEngine.prototype.getOwnedUtilityCount = function (seat) {
-  var self = this;
-  return UTILITY_POSITIONS.filter(function (p) { var ps = self.propertyState[p]; return ps && ps.owner === seat && !ps.mortgaged; }).length;
+MonopolyEngine.prototype.getOwnedUtilityCount = function(seat) {
+  var ut = [12, 28];
+  var count = 0;
+  for (var i = 0; i < ut.length; i++) {
+    var ps = this.propertyState[ut[i]];
+    if (ps && ps.owner === seat && !ps.mortgaged) count++;
+  }
+  return count;
 };
 
-/* ---------- rent ---------- */
-
-MonopolyEngine.prototype.calculateRent = function (pos, diceTotal) {
-  if (!diceTotal) diceTotal = 0;
+MonopolyEngine.prototype.calculateRent = function(pos, diceTotal) {
   var space = BOARD_DATA[pos];
   var ps = this.propertyState[pos];
-  if (!ps || ps.owner == null || ps.mortgaged) return 0;
-  if (space.type === 'railroad') { var c = this.getOwnedRailroadCount(ps.owner); return [0,25,50,100,200][c] || 0; }
-  if (space.type === 'utility')  { var u = this.getOwnedUtilityCount(ps.owner); return u === 1 ? diceTotal * 4 : diceTotal * 10; }
+  if (!ps || ps.owner === null || ps.owner === undefined || ps.mortgaged) return 0;
+  var owner = ps.owner;
+
+  if (space.type === 'railroad') {
+    var count = this.getOwnedRailroadCount(owner);
+    return [0, 25, 50, 100, 200][count] || 0;
+  }
+  if (space.type === 'utility') {
+    var uCount = this.getOwnedUtilityCount(owner);
+    var mult = uCount >= 2 ? 10 : 4;
+    return mult * (diceTotal || 7);
+  }
   if (space.type === 'property') {
-    var h = ps.houses || 0;
-    if (h > 0) return space.rent[h];
-    if (this.ownsFullGroup(ps.owner, space.group)) return space.rent[0] * 2;
-    return space.rent[0];
+    var houses = ps.houses || 0;
+    if (houses === 0) {
+      var baseRent = space.rent[0];
+      if (this.ownsFullGroup(owner, space.group)) baseRent *= 2;
+      return baseRent;
+    }
+    return space.rent[houses] || space.rent[space.rent.length - 1];
   }
   return 0;
 };
 
-/* ---------- buy ---------- */
-
-MonopolyEngine.prototype.buyProperty = function (seat, pos) {
-  var space = BOARD_DATA[pos]; var p = this.getPlayer(seat);
-  if (!p || !space.price || this.propertyState[pos] || p.money < space.price) return false;
-  p.money -= space.price; p.properties.push(pos);
+MonopolyEngine.prototype.buyProperty = function(seat, pos) {
+  var space = BOARD_DATA[pos];
+  var p = this.getPlayer(seat);
+  if (!p || !space || !space.price) return false;
+  if (this.propertyState[pos]) return false;
+  if (p.money < space.price) return false;
+  p.money -= space.price;
+  p.properties.push(pos);
   this.propertyState[pos] = { owner: seat, houses: 0, mortgaged: false };
   return true;
 };
 
-/* ---------- building ---------- */
-
-MonopolyEngine.prototype.canBuildOn = function (seat, pos) {
-  var space = BOARD_DATA[pos]; if (!space || space.type !== 'property') return false;
-  var ps = this.propertyState[pos]; if (!ps || ps.owner !== seat || ps.mortgaged) return false;
-  if (!this.ownsFullGroup(seat, space.group)) return false;
-  var gp = COLOR_GROUPS[space.group]; var self = this;
-  if (gp.some(function (g) { return self.propertyState[g] && self.propertyState[g].mortgaged; })) return false;
-  if (ps.houses >= 5) return false;
-  var min = Math.min.apply(null, gp.map(function (g) { return (self.propertyState[g] || {}).houses || 0; }));
-  if (ps.houses > min) return false;
-  if (ps.houses === 4) { if (this.hotelsAvailable <= 0) return false; }
-  else { if (this.housesAvailable <= 0) return false; }
-  var pl = this.getPlayer(seat); if (!pl || pl.money < space.houseCost) return false;
-  return true;
-};
-
-MonopolyEngine.prototype.buildHouse = function (seat, pos) {
-  if (!this.canBuildOn(seat, pos)) return false;
-  var space = BOARD_DATA[pos]; var ps = this.propertyState[pos]; var p = this.getPlayer(seat);
-  p.money -= space.houseCost;
-  if (ps.houses === 4) { ps.houses = 5; this.hotelsAvailable--; this.housesAvailable += 4; }
-  else { ps.houses++; this.housesAvailable--; }
-  return true;
-};
-
-MonopolyEngine.prototype.canSellHouseOn = function (seat, pos) {
-  var space = BOARD_DATA[pos]; if (!space || space.type !== 'property') return false;
-  var ps = this.propertyState[pos]; if (!ps || ps.owner !== seat || ps.houses <= 0) return false;
-  var gp = COLOR_GROUPS[space.group]; var self = this;
-  var mx = Math.max.apply(null, gp.map(function (g) { return (self.propertyState[g] || {}).houses || 0; }));
-  return ps.houses >= mx;
-};
-
-MonopolyEngine.prototype.sellHouse = function (seat, pos) {
-  if (!this.canSellHouseOn(seat, pos)) return false;
-  var space = BOARD_DATA[pos]; var ps = this.propertyState[pos]; var p = this.getPlayer(seat);
-  p.money += Math.floor(space.houseCost / 2);
-  if (ps.houses === 5) { ps.houses = 4; this.hotelsAvailable++; this.housesAvailable -= 4; if (this.housesAvailable < 0) this.housesAvailable = 0; }
-  else { ps.houses--; this.housesAvailable++; }
-  return true;
-};
-
-/* ---------- mortgage ---------- */
-
-MonopolyEngine.prototype.canMortgage = function (seat, pos) {
-  var ps = this.propertyState[pos]; if (!ps || ps.owner !== seat || ps.mortgaged) return false;
+MonopolyEngine.prototype.canBuildOn = function(seat, pos) {
   var space = BOARD_DATA[pos];
-  if (space.group) { var gp = COLOR_GROUPS[space.group]; var self = this; if (gp.some(function (g) { return (self.propertyState[g] || {}).houses > 0; })) return false; }
+  if (!space || space.type !== 'property') return false;
+  var ps = this.propertyState[pos];
+  if (!ps || ps.owner !== seat || ps.mortgaged) return false;
+  if (!this.ownsFullGroup(seat, space.group)) return false;
+  var houses = ps.houses || 0;
+  if (houses >= 5) return false;
+  var group = COLOR_GROUPS[space.group];
+  for (var i = 0; i < group.length; i++) {
+    var ops = this.propertyState[group[i]];
+    if (ops && ops.mortgaged) return false;
+    var oh = (ops ? ops.houses : 0) || 0;
+    if (oh < houses) return false;
+  }
+  if (houses === 4) {
+    if (this.hotelsAvailable <= 0) return false;
+  } else {
+    if (this.housesAvailable <= 0) return false;
+  }
+  var p = this.getPlayer(seat);
+  if (!p || p.money < space.houseCost) return false;
   return true;
 };
 
-MonopolyEngine.prototype.mortgageProperty = function (seat, pos) {
-  if (!this.canMortgage(seat, pos)) return false;
-  var space = BOARD_DATA[pos]; var ps = this.propertyState[pos]; var p = this.getPlayer(seat);
-  ps.mortgaged = true; p.money += space.mortgage; return true;
-};
-
-MonopolyEngine.prototype.unmortgageProperty = function (seat, pos) {
-  var ps = this.propertyState[pos]; if (!ps || ps.owner !== seat || !ps.mortgaged) return false;
-  var space = BOARD_DATA[pos]; var cost = Math.floor(space.mortgage * 1.1);
-  var p = this.getPlayer(seat); if (p.money < cost) return false;
-  p.money -= cost; ps.mortgaged = false; return true;
-};
-
-/* ---------- cards ---------- */
-
-MonopolyEngine.prototype.drawChance = function () {
-  var c = this.chanceDeck[this.chanceIndex]; this.chanceIndex = (this.chanceIndex + 1) % this.chanceDeck.length; return c;
-};
-MonopolyEngine.prototype.drawChest = function () {
-  var c = this.chestDeck[this.chestIndex]; this.chestIndex = (this.chestIndex + 1) % this.chestDeck.length; return c;
-};
-
-MonopolyEngine.prototype.executeCard = function (seat, card) {
-  var p = this.getPlayer(seat); if (!p) return { type: 'none' };
-  var a = card.action; var self = this;
-  switch (a.type) {
-    case 'move-to': this.movePlayerTo(seat, a.dest, true); return { type: 'moved', dest: a.dest, landAction: true };
-    case 'move-back': p.position = (p.position - a.spaces + 40) % 40; return { type: 'moved', dest: p.position, landAction: true };
-    case 'go-to-jail': this.sendToJail(seat); return { type: 'jail' };
-    case 'collect': p.money += a.amount; return { type: 'collect', amount: a.amount };
-    case 'pay': p.money -= a.amount; this.freeParkingPot += a.amount; return { type: 'pay', amount: a.amount };
-    case 'pay-each': {
-      var others = this.activePlayers().filter(function (o) { return o.seatIndex !== seat; });
-      var t = others.length * a.amount; p.money -= t;
-      others.forEach(function (o) { o.money += a.amount; });
-      return { type: 'pay', amount: t };
-    }
-    case 'collect-each': {
-      var others2 = this.activePlayers().filter(function (o) { return o.seatIndex !== seat; });
-      var t2 = others2.length * a.amount;
-      others2.forEach(function (o) { o.money -= a.amount; });
-      p.money += t2;
-      return { type: 'collect', amount: t2 };
-    }
-    case 'repairs': {
-      var cost = 0;
-      p.properties.forEach(function (pos) {
-        var ps = self.propertyState[pos];
-        if (ps && ps.houses > 0) { cost += ps.houses === 5 ? a.perHotel : ps.houses * a.perHouse; }
-      });
-      p.money -= cost; this.freeParkingPot += cost;
-      return { type: 'pay', amount: cost };
-    }
-    case 'get-out-of-jail': p.getOutOfJailCards++; return { type: 'get-out-of-jail' };
-    case 'nearest-railroad-2x': {
-      var rr = [5,15,25,35]; var nr = null;
-      for (var i = 0; i < rr.length; i++) { if (rr[i] > p.position) { nr = rr[i]; break; } }
-      if (nr == null) nr = rr[0];
-      this.movePlayerTo(seat, nr, true);
-      return { type: 'moved', dest: nr, landAction: true, rentMultiplier: 2 };
-    }
-    case 'nearest-utility-10x': {
-      var ut = [12,28]; var nu = null;
-      for (var j = 0; j < ut.length; j++) { if (ut[j] > p.position) { nu = ut[j]; break; } }
-      if (nu == null) nu = ut[0];
-      this.movePlayerTo(seat, nu, true);
-      return { type: 'moved', dest: nu, landAction: true, utilityMultiplier: 10 };
-    }
-    default: return { type: 'none' };
+MonopolyEngine.prototype.buildHouse = function(seat, pos) {
+  if (!this.canBuildOn(seat, pos)) return false;
+  var space = BOARD_DATA[pos];
+  var ps = this.propertyState[pos];
+  var p = this.getPlayer(seat);
+  p.money -= space.houseCost;
+  var oldH = ps.houses || 0;
+  ps.houses = oldH + 1;
+  if (ps.houses === 5) {
+    this.housesAvailable += 4;
+    this.hotelsAvailable--;
+  } else {
+    this.housesAvailable--;
   }
+  return true;
 };
 
-/* ---------- tax ---------- */
-
-MonopolyEngine.prototype.payTax = function (seat, pos) {
-  var space = BOARD_DATA[pos]; var p = this.getPlayer(seat);
-  if (!p || !space.amount) return 0;
-  p.money -= space.amount; this.freeParkingPot += space.amount; return space.amount;
+MonopolyEngine.prototype.canSellHouseOn = function(seat, pos) {
+  var space = BOARD_DATA[pos];
+  if (!space || space.type !== 'property') return false;
+  var ps = this.propertyState[pos];
+  if (!ps || ps.owner !== seat) return false;
+  var houses = ps.houses || 0;
+  if (houses <= 0) return false;
+  if (houses === 5 && this.housesAvailable < 4) return false;
+  var group = COLOR_GROUPS[space.group];
+  for (var i = 0; i < group.length; i++) {
+    if (group[i] === pos) continue;
+    var ops = this.propertyState[group[i]];
+    var oh = (ops ? ops.houses : 0) || 0;
+    if (oh > houses) return false;
+  }
+  return true;
 };
 
-/* ---------- free parking ---------- */
-
-MonopolyEngine.prototype.collectFreeParking = function (seat) {
-  var p = this.getPlayer(seat); var pot = this.freeParkingPot;
-  if (p && pot > 0) { p.money += pot; this.freeParkingPot = 0; }
-  return pot;
+MonopolyEngine.prototype.sellHouse = function(seat, pos) {
+  if (!this.canSellHouseOn(seat, pos)) return false;
+  var space = BOARD_DATA[pos];
+  var ps = this.propertyState[pos];
+  var p = this.getPlayer(seat);
+  var refund = Math.floor(space.houseCost / 2);
+  p.money += refund;
+  if (ps.houses === 5) {
+    ps.houses = 4;
+    this.hotelsAvailable++;
+    this.housesAvailable -= 4;
+  } else {
+    ps.houses--;
+    this.housesAvailable++;
+  }
+  return true;
 };
 
-/* ---------- jail ---------- */
+MonopolyEngine.prototype.canMortgage = function(seat, pos) {
+  var ps = this.propertyState[pos];
+  if (!ps || ps.owner !== seat || ps.mortgaged) return false;
+  if ((ps.houses || 0) > 0) return false;
+  var space = BOARD_DATA[pos];
+  if (space.group) {
+    var group = COLOR_GROUPS[space.group];
+    for (var i = 0; i < group.length; i++) {
+      var ops = this.propertyState[group[i]];
+      if (ops && (ops.houses || 0) > 0) return false;
+    }
+  }
+  return true;
+};
 
-MonopolyEngine.prototype.tryJailRoll = function (seat, d1, d2) {
-  var p = this.getPlayer(seat); if (!p || !p.inJail) return { freed: false };
+MonopolyEngine.prototype.mortgageProperty = function(seat, pos) {
+  if (!this.canMortgage(seat, pos)) return false;
+  var space = BOARD_DATA[pos];
+  var ps = this.propertyState[pos];
+  var p = this.getPlayer(seat);
+  ps.mortgaged = true;
+  p.money += space.mortgage;
+  return true;
+};
+
+MonopolyEngine.prototype.unmortgageProperty = function(seat, pos) {
+  var ps = this.propertyState[pos];
+  if (!ps || ps.owner !== seat || !ps.mortgaged) return false;
+  var space = BOARD_DATA[pos];
+  var cost = Math.floor(space.mortgage * 1.1);
+  var p = this.getPlayer(seat);
+  if (p.money < cost) return false;
+  p.money -= cost;
+  ps.mortgaged = false;
+  return true;
+};
+
+MonopolyEngine.prototype.drawChance = function() {
+  var card = this.chanceDeck[this.chanceIdx];
+  this.chanceIdx = (this.chanceIdx + 1) % this.chanceDeck.length;
+  return card;
+};
+
+MonopolyEngine.prototype.drawChest = function() {
+  var card = this.chestDeck[this.chestIdx];
+  this.chestIdx = (this.chestIdx + 1) % this.chestDeck.length;
+  return card;
+};
+
+MonopolyEngine.prototype.executeCard = function(seat, card) {
+  var p = this.getPlayer(seat);
+  if (!p) return { type: 'error' };
+  var result = { type: card.action, data: {} };
+
+  switch (card.action) {
+    case 'move-to':
+      var mr = this.movePlayerTo(seat, card.data.pos, card.data.collectGo);
+      result.data.passedGo = mr.passedGo;
+      result.data.newPos = card.data.pos;
+      break;
+    case 'collect':
+      p.money += card.data.amount;
+      result.data.amount = card.data.amount;
+      break;
+    case 'pay':
+      p.money -= card.data.amount;
+      this.freeParkingPot += card.data.amount;
+      result.data.amount = card.data.amount;
+      break;
+    case 'jail-card':
+      p.getOutOfJailCards++;
+      break;
+    case 'go-to-jail':
+      this.sendToJail(seat);
+      break;
+    case 'move-back':
+      var newP = (p.position - card.data.spaces + 40) % 40;
+      p.position = newP;
+      result.data.newPos = newP;
+      break;
+    case 'nearest-railroad':
+      var railroads = [5, 15, 25, 35];
+      var nearest = railroads[0];
+      for (var ri = 0; ri < railroads.length; ri++) {
+        if (railroads[ri] > p.position) { nearest = railroads[ri]; break; }
+        if (ri === railroads.length - 1) nearest = railroads[0];
+      }
+      var mrr = this.movePlayerTo(seat, nearest, true);
+      result.data.passedGo = mrr.passedGo;
+      result.data.newPos = nearest;
+      result.data.doubleRent = true;
+      break;
+    case 'nearest-utility':
+      var utils = [12, 28];
+      var nearestU = utils[0];
+      for (var ui = 0; ui < utils.length; ui++) {
+        if (utils[ui] > p.position) { nearestU = utils[ui]; break; }
+        if (ui === utils.length - 1) nearestU = utils[0];
+      }
+      var mru = this.movePlayerTo(seat, nearestU, true);
+      result.data.passedGo = mru.passedGo;
+      result.data.newPos = nearestU;
+      result.data.tenXDice = true;
+      break;
+    case 'collect-from-all':
+      var active = this.activePlayers();
+      var total = 0;
+      for (var ci = 0; ci < active.length; ci++) {
+        if (active[ci].seatIndex !== seat) {
+          active[ci].money -= card.data.amount;
+          total += card.data.amount;
+        }
+      }
+      p.money += total;
+      result.data.total = total;
+      break;
+    case 'repairs':
+      var rCost = 0;
+      for (var rpos in this.propertyState) {
+        if (this.propertyState.hasOwnProperty(rpos)) {
+          var pst = this.propertyState[rpos];
+          if (pst.owner === seat) {
+            var rh = pst.houses || 0;
+            if (rh === 5) rCost += card.data.perHotel;
+            else rCost += rh * card.data.perHouse;
+          }
+        }
+      }
+      p.money -= rCost;
+      this.freeParkingPot += rCost;
+      result.data.cost = rCost;
+      break;
+  }
+  return result;
+};
+
+MonopolyEngine.prototype.payTax = function(seat, pos) {
+  var space = BOARD_DATA[pos];
+  var p = this.getPlayer(seat);
+  if (!p || !space) return;
+  p.money -= space.price;
+  this.freeParkingPot += space.price;
+};
+
+MonopolyEngine.prototype.collectFreeParking = function(seat) {
+  var p = this.getPlayer(seat);
+  if (!p) return 0;
+  var amount = this.freeParkingPot;
+  p.money += amount;
+  this.freeParkingPot = 0;
+  return amount;
+};
+
+MonopolyEngine.prototype.tryJailRoll = function(seat, d1, d2) {
+  var p = this.getPlayer(seat);
+  if (!p || !p.inJail) return { freed: false, forcePay: false };
   p.jailTurns++;
-  if (d1 === d2) { p.inJail = false; p.jailTurns = 0; return { freed: true, doubles: true }; }
-  if (p.jailTurns >= 3) { p.money -= 50; p.inJail = false; p.jailTurns = 0; return { freed: true, paid: true }; }
-  return { freed: false };
+  if (d1 === d2) {
+    p.inJail = false;
+    p.jailTurns = 0;
+    return { freed: true, forcePay: false };
+  }
+  if (p.jailTurns >= 3) {
+    p.money -= 50;
+    p.inJail = false;
+    p.jailTurns = 0;
+    return { freed: true, forcePay: true };
+  }
+  return { freed: false, forcePay: false };
 };
 
-MonopolyEngine.prototype.payJailFine = function (seat) {
-  var p = this.getPlayer(seat); if (!p || !p.inJail) return false;
-  p.money -= 50; p.inJail = false; p.jailTurns = 0; return true;
+MonopolyEngine.prototype.payJailFine = function(seat) {
+  var p = this.getPlayer(seat);
+  if (!p || !p.inJail) return false;
+  if (p.money < 50) return false;
+  p.money -= 50;
+  p.inJail = false;
+  p.jailTurns = 0;
+  return true;
 };
 
-MonopolyEngine.prototype.useJailCard = function (seat) {
-  var p = this.getPlayer(seat); if (!p || !p.inJail || p.getOutOfJailCards <= 0) return false;
-  p.getOutOfJailCards--; p.inJail = false; p.jailTurns = 0; return true;
+MonopolyEngine.prototype.useJailCard = function(seat) {
+  var p = this.getPlayer(seat);
+  if (!p || !p.inJail || p.getOutOfJailCards <= 0) return false;
+  p.getOutOfJailCards--;
+  p.inJail = false;
+  p.jailTurns = 0;
+  return true;
 };
 
-/* ---------- bankruptcy ---------- */
-
-MonopolyEngine.prototype.totalAssets = function (seat) {
-  var p = this.getPlayer(seat); if (!p) return 0;
-  var total = p.money; var self = this;
-  p.properties.forEach(function (pos) {
-    var space = BOARD_DATA[pos]; var ps = self.propertyState[pos]; if (!ps) return;
-    if (!ps.mortgaged) total += space.mortgage;
-    if (ps.houses > 0) { total += (ps.houses === 5 ? 5 : ps.houses) * Math.floor(space.houseCost / 2); }
-  });
+MonopolyEngine.prototype.totalAssets = function(seat) {
+  var p = this.getPlayer(seat);
+  if (!p) return 0;
+  var total = p.money;
+  for (var i = 0; i < p.properties.length; i++) {
+    var pos = p.properties[i];
+    var space = BOARD_DATA[pos];
+    var ps = this.propertyState[pos];
+    if (!ps || !ps.mortgaged) {
+      total += space.mortgage || 0;
+    }
+    if (ps) {
+      var h = ps.houses || 0;
+      if (h > 0 && space.houseCost) {
+        total += Math.floor(h * space.houseCost / 2);
+      }
+    }
+  }
   return total;
 };
 
-MonopolyEngine.prototype.isBankrupt = function (seat) { return this.totalAssets(seat) < 0; };
+MonopolyEngine.prototype.isBankrupt = function(seat) {
+  return this.totalAssets(seat) < 0;
+};
 
-MonopolyEngine.prototype.declareBankruptcy = function (seat, creditorSeat) {
-  var p = this.getPlayer(seat); if (!p) return;
-  p.bankrupt = true; var self = this;
-  if (creditorSeat != null) {
-    var cr = this.getPlayer(creditorSeat);
-    if (cr) {
-      cr.money += Math.max(0, p.money);
-      p.properties.forEach(function (pos) {
-        var ps = self.propertyState[pos]; if (!ps) return;
-        ps.owner = creditorSeat;
-        if (ps.houses > 0) {
-          var hv = Math.floor(BOARD_DATA[pos].houseCost / 2);
-          if (ps.houses === 5) { self.hotelsAvailable++; cr.money += hv * 5; }
-          else { self.housesAvailable += ps.houses; cr.money += hv * ps.houses; }
-          ps.houses = 0;
+MonopolyEngine.prototype.declareBankruptcy = function(seat, creditorSeat) {
+  var p = this.getPlayer(seat);
+  if (!p) return;
+  p.bankrupt = true;
+
+  if (creditorSeat !== null && creditorSeat !== undefined) {
+    var creditor = this.getPlayer(creditorSeat);
+    if (creditor) {
+      if (p.money > 0) creditor.money += p.money;
+      for (var i = 0; i < p.properties.length; i++) {
+        var pos = p.properties[i];
+        var ps = this.propertyState[pos];
+        if (ps) {
+          if (ps.houses && ps.houses > 0) {
+            if (ps.houses === 5) this.hotelsAvailable++;
+            else this.housesAvailable += ps.houses;
+            ps.houses = 0;
+          }
+          ps.owner = creditorSeat;
+          creditor.properties.push(pos);
         }
-        cr.properties.push(pos);
-      });
+      }
+      creditor.getOutOfJailCards += p.getOutOfJailCards;
     }
   } else {
-    p.properties.forEach(function (pos) {
-      var ps = self.propertyState[pos]; if (!ps) return;
-      if (ps.houses === 5) self.hotelsAvailable++; else self.housesAvailable += ps.houses;
-      delete self.propertyState[pos];
-    });
+    for (var j = 0; j < p.properties.length; j++) {
+      var pos2 = p.properties[j];
+      var ps2 = this.propertyState[pos2];
+      if (ps2) {
+        if (ps2.houses === 5) this.hotelsAvailable++;
+        else if (ps2.houses > 0) this.housesAvailable += ps2.houses;
+        delete this.propertyState[pos2];
+      }
+    }
   }
-  p.money = 0; p.properties = [];
+  p.properties = [];
+  p.money = 0;
+  p.getOutOfJailCards = 0;
+  p.inJail = false;
 };
 
-/* ---------- turn advance ---------- */
-
-MonopolyEngine.prototype.nextTurn = function () {
+MonopolyEngine.prototype.nextTurn = function() {
+  var active = this.activePlayers();
+  if (active.length <= 1) return;
+  var idx = -1;
+  for (var i = 0; i < active.length; i++) {
+    if (active[i].seatIndex === this.currentTurn) { idx = i; break; }
+  }
+  var nextIdx = (idx + 1) % active.length;
+  this.currentTurn = active[nextIdx].seatIndex;
   this.doublesCount = 0;
-  var active = this.activePlayers(); if (active.length <= 1) return false;
-  var next = this.currentTurn;
-  for (var i = 0; i < this.players.length; i++) {
-    next = (next + 1) % this.players.length;
-    var np = this.getPlayer(next); if (np && !np.bankrupt) break;
+  this.gamePhase = 'rolling';
+  this.turnNumber++;
+};
+
+MonopolyEngine.prototype.checkWinner = function() {
+  var active = this.activePlayers();
+  if (active.length === 1) return active[0];
+  return null;
+};
+
+MonopolyEngine.prototype.executeTrade = function(offererSeat, receiverSeat, offererCash, receiverCash, offererProps, receiverProps) {
+  var offerer = this.getPlayer(offererSeat);
+  var receiver = this.getPlayer(receiverSeat);
+  if (!offerer || !receiver) return false;
+  offerer.money -= offererCash;
+  offerer.money += receiverCash;
+  receiver.money -= receiverCash;
+  receiver.money += offererCash;
+  var i, pos, ps, idx;
+  for (i = 0; i < offererProps.length; i++) {
+    pos = offererProps[i];
+    ps = this.propertyState[pos];
+    if (ps) ps.owner = receiverSeat;
+    idx = offerer.properties.indexOf(pos);
+    if (idx >= 0) offerer.properties.splice(idx, 1);
+    receiver.properties.push(pos);
   }
-  this.currentTurn = next; this.turnNumber++; this.gamePhase = 'rolling'; return true;
-};
-
-MonopolyEngine.prototype.checkWinner = function () {
-  var a = this.activePlayers(); return a.length === 1 ? a[0] : null;
-};
-
-/* ---------- trade ---------- */
-
-MonopolyEngine.prototype.executeTrade = function (oSeat, rSeat, oCash, rCash, oProps, rProps) {
-  var off = this.getPlayer(oSeat); var rec = this.getPlayer(rSeat);
-  if (!off || !rec) return false; var self = this;
-  off.money -= oCash; off.money += rCash; rec.money -= rCash; rec.money += oCash;
-  oProps.forEach(function (pos) {
-    off.properties = off.properties.filter(function (x) { return x !== pos; });
-    rec.properties.push(pos);
-    if (self.propertyState[pos]) self.propertyState[pos].owner = rSeat;
-  });
-  rProps.forEach(function (pos) {
-    rec.properties = rec.properties.filter(function (x) { return x !== pos; });
-    off.properties.push(pos);
-    if (self.propertyState[pos]) self.propertyState[pos].owner = oSeat;
-  });
+  for (i = 0; i < receiverProps.length; i++) {
+    pos = receiverProps[i];
+    ps = this.propertyState[pos];
+    if (ps) ps.owner = offererSeat;
+    idx = receiver.properties.indexOf(pos);
+    if (idx >= 0) receiver.properties.splice(idx, 1);
+    offerer.properties.push(pos);
+  }
   return true;
 };
 
+MonopolyEngine.prototype.serialise = function() {
+  return {
+    players: JSON.parse(JSON.stringify(this.players)),
+    currentTurn: this.currentTurn,
+    propertyState: JSON.parse(JSON.stringify(this.propertyState)),
+    housesAvailable: this.housesAvailable,
+    hotelsAvailable: this.hotelsAvailable,
+    freeParkingPot: this.freeParkingPot,
+    chanceDeck: this.chanceDeck.slice(),
+    chestDeck: this.chestDeck.slice(),
+    chanceIdx: this.chanceIdx,
+    chestIdx: this.chestIdx,
+    gamePhase: this.gamePhase,
+    lastDice: JSON.parse(JSON.stringify(this.lastDice)),
+    doublesCount: this.doublesCount,
+    turnNumber: this.turnNumber
+  };
+};
 
-// ================================================================
-//  MONOPOLY CLIENT  (lobby + game UI + network)
-// ================================================================
+MonopolyEngine.prototype.initFromState = function(state) {
+  if (!state) return;
+  this.players = state.players || [];
+  this.currentTurn = state.currentTurn || 0;
+  this.propertyState = state.propertyState || {};
+  this.housesAvailable = (state.housesAvailable !== undefined) ? state.housesAvailable : 32;
+  this.hotelsAvailable = (state.hotelsAvailable !== undefined) ? state.hotelsAvailable : 12;
+  this.freeParkingPot = state.freeParkingPot || 0;
+  if (state.chanceDeck) this.chanceDeck = state.chanceDeck;
+  if (state.chestDeck) this.chestDeck = state.chestDeck;
+  this.chanceIdx = state.chanceIdx || 0;
+  this.chestIdx = state.chestIdx || 0;
+  this.gamePhase = state.gamePhase || 'rolling';
+  this.lastDice = state.lastDice || { die1:0, die2:0, total:0, doubles:false };
+  this.doublesCount = state.doublesCount || 0;
+  this.turnNumber = state.turnNumber || 1;
+};
+
+/* ──────────────────────────────────────
+   6. MONOPOLY CLIENT
+   ────────────────────────────────────── */
 function MonopolyClient() {
   this.socket = null;
-  this.myId = null;
+  this.engine = new MonopolyEngine();
   this.mySeat = null;
   this.myName = '';
   this.roomCode = '';
   this.isHost = false;
+  this.players = [];
   this.reconnectToken = null;
-  this.engine = new MonopolyEngine();
-  this.gameStarted = false;
-  this.pendingCardAction = null;
-  this.rentMultiplier = 1;
-  this.utilityOverride = 0;
   this._animating = false;
-  this._pendingRent = null;
-  this._latestGS = null;
-  this.init();
+  this._pendingCard = null;
+  this._pendingCardType = null;
+  this._rentCreditor = null;
+  this._characterSelections = {};
+  this._characterConfirmed = {};
+  this._myCharacter = null;
+  this._gameStarted = false;
 }
 
-/* -------- init -------- */
-
-MonopolyClient.prototype.init = function () {
+MonopolyClient.prototype.init = function() {
+  this._bindLanding();
   this.connectSocket();
-  this.bindLobbyEvents();
-  this.bindGameEvents();
-  this.tryReconnect();
+  this._tryReconnect();
 };
 
-/* -------- socket -------- */
-
-MonopolyClient.prototype.connectSocket = function () {
+/* ────────── SOCKET ────────── */
+MonopolyClient.prototype.connectSocket = function() {
   var self = this;
-  this.socket = io({ reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 20 });
+  this.socket = io({ reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
 
-  this.socket.on('connect', function () {
-    self.setConnectionStatus(true);
-    if (self.reconnectToken && self.roomCode) {
-      self.socket.emit('join-room', {
-        roomCode: self.roomCode, playerName: self.myName, reconnectToken: self.reconnectToken
-      }, function (res) {
-        if (res && res.success && res.reconnected) {
-          self.mySeat = res.seatIndex;
-          self.handleGameState(res.gameState);
-          if (self.gameStarted) { showScreen('screen-game'); self.renderGame(); }
-          showToast('Reconnected!');
-        }
+  this.socket.on('connect', function() {
+    $('#connection-dot').className = 'connection-dot connected';
+    $('#connection-label').textContent = 'Connected';
+  });
+
+  this.socket.on('disconnect', function() {
+    $('#connection-dot').className = 'connection-dot';
+    $('#connection-label').textContent = 'Disconnected';
+    showToast('Disconnected from server', 'error');
+  });
+
+  this.socket.on('connect_error', function() {
+    $('#connection-dot').className = 'connection-dot';
+    $('#connection-label').textContent = 'Connection error';
+  });
+
+  this.socket.on('room-created', function(data) { self._onRoomCreated(data); });
+  this.socket.on('room-joined', function(data) { self._onRoomJoined(data); });
+  this.socket.on('player-joined', function(data) { self._onPlayerJoined(data); });
+  this.socket.on('player-left', function(data) { self._onPlayerLeft(data); });
+  this.socket.on('player-disconnected', function(data) { self._onPlayerDisconnected(data); });
+  this.socket.on('player-reconnected', function(data) { self._onPlayerReconnected(data); });
+  this.socket.on('player-abandoned', function(data) { self._onPlayerAbandoned(data); });
+
+  this.socket.on('game-started', function(data) {
+    self._enterCharacterSelect();
+  });
+
+  this.socket.on('dice-rolled', function(data) {
+    self._onDiceRolled(data);
+  });
+
+  this.socket.on('turn-changed', function(data) {
+    // BUG FIX #1: Server authoritative turn
+    self.engine.currentTurn = data.currentTurn;
+    self.engine.doublesCount = 0;
+    self.engine.gamePhase = 'rolling';
+    self.engine.turnNumber = data.turnNumber || (self.engine.turnNumber + 1);
+    self.renderGame();
+    var cp = self.engine.currentPlayer();
+    if (cp) self.addLog(cp.name + "'s turn");
+  });
+
+  this.socket.on('game-state-update', function(data) {
+    self.engine.initFromState(data);
+    self.renderGame();
+  });
+
+  this.socket.on('game-action', function(data) {
+    self._handleGameAction(data);
+  });
+
+  this.socket.on('chat-message', function(data) {
+    self._appendChat(data);
+  });
+
+  this.socket.on('error-message', function(data) {
+    showToast(data.message || 'Error', 'error');
+    $('#landing-error').textContent = data.message || '';
+  });
+};
+
+/* ────────── LANDING ────────── */
+MonopolyClient.prototype._bindLanding = function() {
+  var self = this;
+  var nameInput = $('#input-name');
+  var codeInput = $('#input-code');
+  var btnCreate = $('#btn-create');
+  var btnJoin = $('#btn-join');
+
+  function updateButtons() {
+    var hasName = nameInput.value.trim().length >= 1;
+    btnCreate.disabled = !hasName;
+    btnJoin.disabled = !(hasName && codeInput.value.trim().length >= 4);
+  }
+
+  nameInput.addEventListener('input', updateButtons);
+  codeInput.addEventListener('input', updateButtons);
+
+  nameInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!btnCreate.disabled) self.createRoom();
+    }
+  });
+
+  codeInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!btnJoin.disabled) self.joinRoom();
+    }
+  });
+
+  btnCreate.addEventListener('click', function() { self.createRoom(); });
+  btnJoin.addEventListener('click', function() { self.joinRoom(); });
+};
+
+MonopolyClient.prototype.createRoom = function() {
+  var name = $('#input-name').value.trim();
+  if (!name) return;
+  this.myName = name;
+  this.isHost = true;
+  $('#landing-error').textContent = '';
+  this.socket.emit('create-room', { playerName: name });
+};
+
+MonopolyClient.prototype.joinRoom = function() {
+  var name = $('#input-name').value.trim();
+  var code = $('#input-code').value.trim().toUpperCase();
+  if (!name || !code) return;
+  this.myName = name;
+  this.isHost = false;
+  $('#landing-error').textContent = '';
+  this.socket.emit('join-room', { playerName: name, roomCode: code });
+};
+
+MonopolyClient.prototype._onRoomCreated = function(data) {
+  this.roomCode = data.roomCode;
+  this.mySeat = data.seatIndex;
+  this.players = data.players || [];
+  this.reconnectToken = data.reconnectToken || null;
+  saveSession('monopoly-session', {
+    roomCode: this.roomCode,
+    mySeat: this.mySeat,
+    myName: this.myName,
+    isHost: this.isHost,
+    reconnectToken: this.reconnectToken
+  });
+  this._enterWaitingRoom();
+};
+
+MonopolyClient.prototype._onRoomJoined = function(data) {
+  this.roomCode = data.roomCode;
+  this.mySeat = data.seatIndex;
+  this.players = data.players || [];
+  this.reconnectToken = data.reconnectToken || null;
+  if (data.isHost !== undefined) this.isHost = data.isHost;
+  saveSession('monopoly-session', {
+    roomCode: this.roomCode,
+    mySeat: this.mySeat,
+    myName: this.myName,
+    isHost: this.isHost,
+    reconnectToken: this.reconnectToken
+  });
+  // If game already started, might need to go to game screen
+  if (data.gameStarted && data.gameState) {
+    this.engine.initFromState(data.gameState);
+    this._gameStarted = true;
+    this._startActualGame();
+  } else if (data.gameStarted) {
+    this._enterCharacterSelect();
+  } else {
+    this._enterWaitingRoom();
+  }
+};
+
+MonopolyClient.prototype._onPlayerJoined = function(data) {
+  this.players = data.players || this.players;
+  if (data.player) {
+    var found = false;
+    for (var i = 0; i < this.players.length; i++) {
+      if (this.players[i].seatIndex === data.player.seatIndex) { found = true; break; }
+    }
+    if (!found) this.players.push(data.player);
+  }
+  this._renderPlayerList();
+  this._renderWaitingStatus();
+  showToast((data.player ? data.player.name : 'Someone') + ' joined!', 'info');
+};
+
+MonopolyClient.prototype._onPlayerLeft = function(data) {
+  this.players = data.players || this.players;
+  this._renderPlayerList();
+  this._renderWaitingStatus();
+};
+
+MonopolyClient.prototype._onPlayerDisconnected = function(data) {
+  if (data.seatIndex !== undefined) {
+    for (var i = 0; i < this.players.length; i++) {
+      if (this.players[i].seatIndex === data.seatIndex) {
+        this.players[i].connected = false;
+      }
+    }
+    var ep = this.engine.getPlayer(data.seatIndex);
+    if (ep) ep.connected = false;
+  }
+  this._renderPlayerList();
+  this.renderGame();
+  showToast((data.playerName || 'A player') + ' disconnected', 'error');
+};
+
+MonopolyClient.prototype._onPlayerReconnected = function(data) {
+  if (data.seatIndex !== undefined) {
+    for (var i = 0; i < this.players.length; i++) {
+      if (this.players[i].seatIndex === data.seatIndex) {
+        this.players[i].connected = true;
+      }
+    }
+    var ep = this.engine.getPlayer(data.seatIndex);
+    if (ep) ep.connected = true;
+  }
+  this._renderPlayerList();
+  this.renderGame();
+  showToast((data.playerName || 'A player') + ' reconnected!', 'info');
+};
+
+MonopolyClient.prototype._onPlayerAbandoned = function(data) {
+  if (data.seatIndex !== undefined) {
+    var ep = this.engine.getPlayer(data.seatIndex);
+    if (ep) { ep.bankrupt = true; ep.connected = false; }
+  }
+  this.renderGame();
+  var winner = this.engine.checkWinner();
+  if (winner) this.showGameOverModal(winner);
+};
+
+/* ────────── WAITING ROOM ────────── */
+MonopolyClient.prototype._enterWaitingRoom = function() {
+  showScreen('screen-waiting');
+  $('#room-code-display').textContent = this.roomCode;
+  this._renderPlayerList();
+  this._renderWaitingStatus();
+  this._bindWaitingRoom();
+};
+
+MonopolyClient.prototype._bindWaitingRoom = function() {
+  var self = this;
+  var bound = this._waitingBound;
+  if (bound) return;
+  this._waitingBound = true;
+
+  $('#btn-copy-code').addEventListener('click', function() {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(self.roomCode).then(function() {
+        showToast('Room code copied!', 'info');
       });
     }
   });
 
-  this.socket.on('disconnect', function () { self.setConnectionStatus(false); });
+  $('#btn-start-game').addEventListener('click', function() {
+    if (self.isHost && self.players.length >= 2) {
+      self.socket.emit('start-game');
+    }
+  });
 
-  this.socket.on('player-joined',       function (d) { self.onPlayerJoined(d); });
-  this.socket.on('player-left',         function (d) { self.onPlayerLeft(d); });
-  this.socket.on('player-disconnected', function (d) { self.onPlayerDisconnected(d); });
-  this.socket.on('player-reconnected',  function (d) { self.onPlayerReconnected(d); });
-  this.socket.on('player-abandoned',    function (d) { self.onPlayerAbandoned(d); });
-  this.socket.on('chat-message',        function (d) { self.onChatMessage(d); });
-  this.socket.on('error-message',       function (d) { showToast(d.error || 'Error'); });
+  $('#btn-leave-room').addEventListener('click', function() {
+    self.socket.emit('leave-room');
+    clearSession('monopoly-session');
+    showScreen('screen-landing');
+  });
 
-  this.socket.on('game-started',       function (d) { self.onGameStarted(d); });
-  this.socket.on('dice-rolled',        function (d) { self.onDiceRolled(d); });
-  this.socket.on('turn-changed',       function (d) { self.onTurnChanged(d); });
-  this.socket.on('game-state-update',  function (d) { self.onGameStateUpdate(d); });
-  this.socket.on('game-action',        function (d) { self.onGameAction(d); });
-};
-
-MonopolyClient.prototype.setConnectionStatus = function (ok) {
-  var dot = $('#connection-dot'); var lbl = $('#connection-label');
-  if (dot) dot.style.background = ok ? '#2ecc71' : '#e74c3c';
-  if (lbl) lbl.textContent = ok ? 'Connected' : 'Disconnected';
-};
-
-MonopolyClient.prototype.tryReconnect = function () {
-  var s = loadSession(); if (!s) return;
-  this.reconnectToken = s.reconnectToken; this.roomCode = s.roomCode;
-  this.myName = s.playerName; this.mySeat = s.seatIndex;
-  this.myId = s.playerId; this.isHost = s.isHost;
-};
-
-/* -------- sfx helper -------- */
-
-function sfx(name) { if (typeof SFX !== 'undefined' && SFX && SFX.play) SFX.play(name); }
-
-/* -------- lobby binding -------- */
-
-MonopolyClient.prototype.bindLobbyEvents = function () {
-  var self = this;
-  var el;
-  el = $('#btn-create'); if (el) el.addEventListener('click', function () { self.createRoom(); });
-  el = $('#btn-join');   if (el) el.addEventListener('click', function () { self.joinRoom(); });
-  el = $('#input-name'); if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') { var c = $('#input-code'); if (c && c.value) self.joinRoom(); } });
-  el = $('#input-code'); if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') self.joinRoom(); });
-  el = $('#btn-copy-code');  if (el) el.addEventListener('click', function () { navigator.clipboard.writeText(self.roomCode).then(function () { showToast('Code copied!'); }); });
-  el = $('#btn-start-game'); if (el) el.addEventListener('click', function () { self.startGame(); });
-  el = $('#btn-leave-room'); if (el) el.addEventListener('click', function () { self.leaveRoom(); });
-  el = $('#btn-send-chat');  if (el) el.addEventListener('click', function () { self.sendChat(); });
-  el = $('#input-chat');     if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') self.sendChat(); });
-};
-
-/* -------- game binding -------- */
-
-MonopolyClient.prototype.bindGameEvents = function () {
-  var self = this; var el;
-  el = $('#btn-roll-dice');     if (el) el.addEventListener('click', function () { self.rollDice(); });
-  el = $('#btn-buy');           if (el) el.addEventListener('click', function () { self.showBuyModal(); });
-  el = $('#btn-end-turn');      if (el) el.addEventListener('click', function () { self.endTurn(); });
-  el = $('#btn-build');         if (el) el.addEventListener('click', function () { self.showBuildModal(); });
-  el = $('#btn-mortgage');      if (el) el.addEventListener('click', function () { self.showMortgageModal(); });
-  el = $('#btn-trade');         if (el) el.addEventListener('click', function () { self.showTradeModal(); });
-  el = $('#modal-buy-confirm'); if (el) el.addEventListener('click', function () { self.confirmBuy(); });
-  el = $('#modal-buy-auction'); if (el) el.addEventListener('click', function () { self.auctionProperty(); });
-  el = $('#modal-buy-pass');    if (el) el.addEventListener('click', function () { self.passBuy(); });
-  el = $('#card-ok');           if (el) el.addEventListener('click', function () { self.cardOk(); });
-  el = $('#rent-pay');          if (el) el.addEventListener('click', function () { self.payRentConfirm(); });
-  el = $('#build-confirm');     if (el) el.addEventListener('click', function () { self.confirmBuild(); });
-  el = $('#build-cancel');      if (el) el.addEventListener('click', function () { self.closeModal('modal-build'); });
-  el = $('#mortgage-close');    if (el) el.addEventListener('click', function () { self.closeModal('modal-mortgage'); });
-  el = $('#trade-send');        if (el) el.addEventListener('click', function () { self.sendTradeOffer(); });
-  el = $('#trade-cancel');      if (el) el.addEventListener('click', function () { self.closeModal('modal-trade'); });
-  el = $('#bankrupt-manage');   if (el) el.addEventListener('click', function () { self.closeModal('modal-bankrupt'); self.showMortgageModal(); });
-  el = $('#bankrupt-declare');  if (el) el.addEventListener('click', function () { self.confirmBankruptcy(); });
-  el = $('#gameover-new-game'); if (el) el.addEventListener('click', function () { self.closeModal('modal-gameover'); clearSession(); location.reload(); });
-  el = $('#btn-send-game-chat'); if (el) el.addEventListener('click', function () { self.sendGameChat(); });
-  el = $('#input-game-chat');    if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') self.sendGameChat(); });
-};
-
-/* -------- room management -------- */
-
-MonopolyClient.prototype.createRoom = function () {
-  var self = this;
-  var nameEl = $('#input-name'); var name = nameEl ? nameEl.value.trim() : '';
-  if (!name) { this.showLandingError('Enter your name'); return; }
-  this.myName = name;
-  this.socket.emit('create-room', { playerName: name }, function (res) {
-    if (!res || !res.success) { self.showLandingError((res && res.error) || 'Failed to create room'); return; }
-    self.roomCode = res.roomCode; self.reconnectToken = res.reconnectToken;
-    self.myId = self.socket.id; self.isHost = true; self.mySeat = 0;
-    saveSession({ reconnectToken: res.reconnectToken, roomCode: res.roomCode, playerName: name, seatIndex: 0, playerId: self.myId, isHost: true });
-    self.handleGameState(res.gameState);
-    showScreen('screen-waiting'); self.renderWaitingRoom();
+  // Waiting room chat
+  $('#btn-send-chat').addEventListener('click', function() { self.sendChat('input-chat'); });
+  $('#input-chat').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); self.sendChat('input-chat'); }
   });
 };
 
-MonopolyClient.prototype.joinRoom = function () {
-  var self = this;
-  var nameEl = $('#input-name'); var codeEl = $('#input-code');
-  var name = nameEl ? nameEl.value.trim() : '';
-  var code = codeEl ? codeEl.value.trim().toUpperCase() : '';
-  if (!name) { this.showLandingError('Enter your name'); return; }
-  if (!code) { this.showLandingError('Enter room code'); return; }
-  this.myName = name;
-  this.socket.emit('join-room', { roomCode: code, playerName: name }, function (res) {
-    if (!res || !res.success) { self.showLandingError((res && res.error) || 'Failed to join'); return; }
-    self.roomCode = res.roomCode; self.reconnectToken = res.reconnectToken;
-    self.mySeat = res.seatIndex; self.myId = self.socket.id; self.isHost = false;
-    saveSession({ reconnectToken: res.reconnectToken, roomCode: res.roomCode, playerName: name, seatIndex: res.seatIndex, playerId: self.myId, isHost: false });
-    self.handleGameState(res.gameState);
-    if (res.gameState && res.gameState.started) { self.gameStarted = true; showScreen('screen-game'); self.renderGame(); }
-    else { showScreen('screen-waiting'); self.renderWaitingRoom(); }
-  });
-};
-
-MonopolyClient.prototype.handleGameState = function (gs) {
-  if (!gs) return;
-  this.roomCode = gs.roomCode || this.roomCode;
-  var sid = this.socket ? this.socket.id : null; var mid = this.myId;
-  if (gs.hostId === mid || gs.hostId === sid) this.isHost = true;
-  if (gs.players) {
-    var me = gs.players.find(function (p) { return p.id === sid || p.id === mid; });
-    if (me) { this.mySeat = me.seatIndex; this.myId = me.id; }
+MonopolyClient.prototype._renderPlayerList = function() {
+  var list = $('#player-list');
+  if (!list) return;
+  var html = '';
+  for (var i = 0; i < this.players.length; i++) {
+    var p = this.players[i];
+    var color = PLAYER_COLORS[p.seatIndex] || '#888';
+    var dc = (p.connected === false) ? ' (disconnected)' : '';
+    var hostBadge = (i === 0 || p.isHost) ? ' <span class="badge badge-host">HOST</span>' : '';
+    var youBadge = (p.seatIndex === this.mySeat) ? ' <span class="badge badge-you">YOU</span>' : '';
+    html += '<div class="player-row" style="border-left:4px solid ' + color + ';padding:8px 12px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px;">';
+    html += '<span style="color:' + color + ';font-weight:600;font-size:14px;">' + escHtml(p.name || p.playerName || ('Player ' + (p.seatIndex + 1))) + '</span>';
+    html += hostBadge + youBadge;
+    if (dc) html += '<span style="color:#e74c3c;font-size:11px;">' + dc + '</span>';
+    html += '</div>';
   }
-  if (gs.started) { this.gameStarted = true; this.engine.initFromState(gs); }
-  this._latestGS = gs;
+  list.innerHTML = html;
 };
 
-MonopolyClient.prototype.showLandingError = function (msg) {
-  var el = $('#landing-error');
-  if (el) { el.textContent = msg; el.style.display = 'block'; setTimeout(function () { el.style.display = 'none'; }, 4000); }
-};
-
-MonopolyClient.prototype.leaveRoom = function () {
-  this.socket.emit('leave-room'); clearSession(); showScreen('screen-landing'); this.gameStarted = false;
-};
-
-MonopolyClient.prototype.startGame = function () {
-  if (!this.isHost) return;
-  this.socket.emit('game-action', { action: 'start-game' });
-};
-
-/* -------- chat -------- */
-
-MonopolyClient.prototype.sendChat = function () {
-  var input = $('#input-chat'); var msg = input ? input.value.trim() : '';
-  if (!msg) return; this.socket.emit('chat-message', { message: msg }); input.value = '';
-};
-
-MonopolyClient.prototype.sendGameChat = function () {
-  var input = $('#input-game-chat'); var msg = input ? input.value.trim() : '';
-  if (!msg) return; this.socket.emit('chat-message', { message: msg }); input.value = '';
-};
-
-/* -------- waiting room -------- */
-
-MonopolyClient.prototype.renderWaitingRoom = function () {
-  var d = $('#room-code-display'); if (d) d.textContent = this.roomCode;
-  this.updatePlayerList(); this.updateWaitingUI();
-};
-
-MonopolyClient.prototype.updatePlayerList = function () {
-  var gs = this._latestGS; if (!gs || !gs.players) return;
-  var list = $('#player-list'); if (!list) return; list.innerHTML = '';
-  gs.players.forEach(function (p, i) {
-    var li = document.createElement('li'); li.className = 'player-list-item';
-    li.innerHTML = '<span class="player-dot" style="background:' + PLAYER_COLORS[i] + '"></span>' +
-      '<span class="player-name">' + escHtml(p.name) + '</span>' +
-      (p.id === gs.hostId ? '<span class="host-badge">HOST</span>' : '') +
-      (!p.connected ? '<span class="dc-badge">DISCONNECTED</span>' : '');
-    list.appendChild(li);
-  });
-  var badge = $('#player-count-badge'); if (badge) badge.textContent = gs.players.length + '/6';
-};
-
-MonopolyClient.prototype.updateWaitingUI = function () {
-  var gs = this._latestGS;
-  var startBtn = $('#btn-start-game'); var waitMsg = $('#waiting-for-host'); var status = $('#waiting-status');
+MonopolyClient.prototype._renderWaitingStatus = function() {
+  var count = this.players.length;
+  $('#player-count-badge').textContent = count + '/6';
   if (this.isHost) {
-    if (startBtn) startBtn.style.display = '';
-    if (waitMsg) waitMsg.style.display = 'none';
-    var ok = gs && gs.players && gs.players.length >= 2;
-    if (startBtn) startBtn.disabled = !ok;
-    if (status) status.textContent = ok ? 'Ready to start!' : 'Waiting for more players\u2026';
+    if (count >= 2) {
+      $('#btn-start-game').style.display = '';
+      $('#waiting-status').textContent = 'Ready to start!';
+    } else {
+      $('#btn-start-game').style.display = 'none';
+      $('#waiting-status').textContent = 'Need at least 2 players...';
+    }
+    $('#waiting-for-host').style.display = 'none';
   } else {
-    if (startBtn) startBtn.style.display = 'none';
-    if (waitMsg) waitMsg.style.display = '';
-    if (status) status.textContent = 'Waiting for host to start\u2026';
-  }
-  if (gs && gs.chatHistory) {
-    var c = $('#chat-messages'); var self = this;
-    if (c && c.children.length === 0) gs.chatHistory.forEach(function (m) { self.appendChat(m, c); });
-  }
-};
-
-MonopolyClient.prototype.appendChat = function (data, container) {
-  if (!container) return;
-  var div = document.createElement('div'); div.className = 'chat-msg';
-  div.innerHTML = '<span class="chat-name" style="color:' + (data.color || '#888') + '">' + escHtml(data.playerName) + ':</span> ' + escHtml(data.message);
-  container.appendChild(div); container.scrollTop = container.scrollHeight;
-};
-
-/* ======== socket event handlers ======== */
-
-MonopolyClient.prototype.onPlayerJoined = function (d) {
-  if (d.gameState) { this._latestGS = d.gameState; this.handleGameState(d.gameState); }
-  this.updatePlayerList(); this.updateWaitingUI();
-  if (this.gameStarted) this.renderGame();
-  showToast((d.playerName || 'Player') + ' joined');
-};
-
-MonopolyClient.prototype.onPlayerLeft = function (d) {
-  if (d.gameState) { this._latestGS = d.gameState; this.handleGameState(d.gameState); }
-  this.updatePlayerList(); this.updateWaitingUI();
-  showToast((d.playerName || 'Player') + ' left');
-};
-
-MonopolyClient.prototype.onPlayerDisconnected = function (d) {
-  if (d.gameState) { this._latestGS = d.gameState; this.handleGameState(d.gameState); }
-  this.updatePlayerList();
-  if (this.gameStarted) { this.addLog((d.playerName || 'Player') + ' disconnected'); this.renderGame(); }
-};
-
-MonopolyClient.prototype.onPlayerReconnected = function (d) {
-  if (d.gameState) { this._latestGS = d.gameState; this.handleGameState(d.gameState); }
-  this.updatePlayerList();
-  if (this.gameStarted) { this.addLog((d.playerName || 'Player') + ' reconnected'); this.renderGame(); }
-};
-
-MonopolyClient.prototype.onPlayerAbandoned = function (d) {
-  if (d.gameState) { this._latestGS = d.gameState; this.handleGameState(d.gameState); }
-  this.updatePlayerList();
-  if (this.gameStarted) {
-    this.addLog((d.playerName || 'Player') + ' abandoned the game');
-    var p = this.engine.players.find(function (pl) { return pl.id === d.playerId; });
-    if (p && !p.bankrupt) { this.engine.declareBankruptcy(p.seatIndex); this.syncState(); }
-    this.renderGame(); this.checkGameOver();
+    $('#btn-start-game').style.display = 'none';
+    if (count >= 2) {
+      $('#waiting-status').textContent = '';
+      $('#waiting-for-host').style.display = '';
+      $('#waiting-for-host').textContent = 'Waiting for host to start...';
+    } else {
+      $('#waiting-status').textContent = 'Waiting for more players...';
+      $('#waiting-for-host').style.display = 'none';
+    }
   }
 };
 
-MonopolyClient.prototype.onChatMessage = function (d) {
-  this.appendChat(d, $('#chat-messages'));
-  this.appendChat(d, $('#game-chat-messages'));
+MonopolyClient.prototype.sendChat = function(inputId) {
+  var input = $('#' + inputId);
+  if (!input) return;
+  var msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  this.socket.emit('chat-message', { message: msg });
 };
 
-MonopolyClient.prototype.onGameStarted = function (d) {
-  this.gameStarted = true; this._latestGS = d;
-  this.engine.initFromState(d); this.engine.gamePhase = 'rolling';
-  var sid = this.socket ? this.socket.id : null; var mid = this.myId;
-  if (d.players) { var me = d.players.find(function (p) { return p.id === sid || p.id === mid; }); if (me) { this.mySeat = me.seatIndex; this.myId = me.id; } }
-  if (d.hostId === sid) this.isHost = true;
-  showScreen('screen-game'); this.renderGame(); this.addLog('Game started!'); sfx('go');
+MonopolyClient.prototype._appendChat = function(data) {
+  var color = PLAYER_COLORS[data.seatIndex] || '#aaa';
+  var name = escHtml(data.playerName || data.name || 'Unknown');
+  var msg = escHtml(data.message || '');
+  var html = '<div class="chat-msg" style="margin:4px 0;font-size:13px;"><span style="color:' + color + ';font-weight:600;">' + name + ':</span> ' + msg + '</div>';
+
+  // Append to both chat areas
+  var waitChat = $('#chat-messages');
+  var gameChat = $('#game-chat-messages');
+  if (waitChat) { waitChat.innerHTML += html; waitChat.scrollTop = waitChat.scrollHeight; }
+  if (gameChat) { gameChat.innerHTML += html; gameChat.scrollTop = gameChat.scrollHeight; }
 };
 
-MonopolyClient.prototype.onDiceRolled = function (d) {
+/* ────────── CHARACTER SELECT ────────── */
+MonopolyClient.prototype._enterCharacterSelect = function() {
+  showScreen('screen-character-select');
+  this._characterSelections = {};
+  this._characterConfirmed = {};
+  this._myCharacter = null;
+  this._renderCharacterGrid();
+  this._bindCharacterSelect();
+};
+
+MonopolyClient.prototype._bindCharacterSelect = function() {
   var self = this;
-  this.engine.lastDice = { die1: d.die1, die2: d.die2, total: d.total, doubles: d.doubles };
-  this.animateDice(d.die1, d.die2, function () {
-    if (d.seatIndex === self.mySeat) self.handleMyRoll(d);
-    self.renderGame();
+  if (this._charBound) return;
+  this._charBound = true;
+
+  $('#btn-confirm-character').addEventListener('click', function() {
+    self._confirmCharacter();
   });
 };
 
-MonopolyClient.prototype.onTurnChanged = function (d) {
-  if (d.gameState) this.engine.initFromState(d.gameState);
-  else { this.engine.currentTurn = d.currentTurn; this.engine.gamePhase = 'rolling'; this.engine.doublesCount = 0; }
-  this.renderGame();
-  var cp = this.engine.currentPlayer(); if (cp) this.addLog(cp.name + "'s turn");
-};
+MonopolyClient.prototype._renderCharacterGrid = function() {
+  var grid = $('#character-grid');
+  if (!grid) return;
+  var html = '';
+  for (var i = 0; i < CHARACTERS.length; i++) {
+    var ch = CHARACTERS[i];
+    var taken = false;
+    var takenBy = null;
+    var selectedByMe = (this._myCharacter === ch.id);
+    for (var seat in this._characterSelections) {
+      if (this._characterSelections.hasOwnProperty(seat) && this._characterSelections[seat] === ch.id) {
+        taken = true;
+        takenBy = seat;
+        break;
+      }
+    }
+    var cls = 'character-card';
+    if (selectedByMe) cls += ' selected';
+    if (taken && !selectedByMe) cls += ' taken';
+    var confirmed = false;
+    if (takenBy !== null && this._characterConfirmed[takenBy]) confirmed = true;
 
-MonopolyClient.prototype.onGameStateUpdate = function (d) {
-  this.engine.initFromState(d.payload || d); this.renderGame(); this.checkGameOver();
-};
-
-MonopolyClient.prototype.onGameAction = function (d) {
-  var pl = d.payload || {};
-  switch (d.action) {
-    case 'trade-offer':     if (pl.receiverSeat === this.mySeat) this.showIncomingTrade(pl, d.seatIndex); break;
-    case 'trade-accepted':  this.addLog('Trade completed'); showToast('Trade accepted!'); break;
-    case 'trade-rejected':  if (pl.offererSeat === this.mySeat) showToast('Trade was rejected'); break;
-    case 'property-bought': this.addLog(pl.playerName + ' bought ' + pl.propertyName); sfx('buy'); break;
-    case 'rent-paid':       this.addLog(pl.payerName + ' paid $' + pl.amount + ' rent to ' + pl.ownerName); sfx('rent'); break;
-    case 'went-bankrupt':   this.addLog(pl.playerName + ' went bankrupt!'); sfx('bankrupt'); break;
-    case 'built-house':     this.addLog(pl.playerName + ' built on ' + pl.propertyName); sfx('build'); break;
-    case 'drew-card':       this.addLog(pl.playerName + ': ' + pl.text); sfx('card'); break;
-    case 'jail':            this.addLog(pl.playerName + ' went to jail!'); sfx('jail'); break;
-    case 'free-parking':    this.addLog(pl.playerName + ' collected $' + pl.amount + ' from Free Parking!'); sfx('money'); break;
+    html += '<div class="' + cls + '" data-char="' + ch.id + '" style="';
+    html += 'cursor:' + ((taken && !selectedByMe) ? 'not-allowed' : 'pointer') + ';';
+    html += 'opacity:' + ((taken && !selectedByMe) ? '0.4' : '1') + ';';
+    html += 'border:3px solid ' + (selectedByMe ? '#f39c12' : (taken ? '#666' : 'rgba(255,255,255,0.2)')) + ';';
+    html += 'border-radius:12px;padding:20px;text-align:center;background:rgba(255,255,255,0.05);transition:all 0.2s;">';
+    html += '<div style="font-size:48px;margin-bottom:8px;">' + ch.emoji + '</div>';
+    html += '<div style="font-size:14px;font-weight:600;color:#fff;">' + ch.name + '</div>';
+    if (taken && !selectedByMe) {
+      var takerName = '';
+      for (var pi = 0; pi < this.players.length; pi++) {
+        if (String(this.players[pi].seatIndex) === String(takenBy)) {
+          takerName = this.players[pi].name || this.players[pi].playerName || '';
+          break;
+        }
+      }
+      html += '<div style="font-size:11px;color:#e74c3c;margin-top:4px;">' + escHtml(takerName) + (confirmed ? ' ✓' : '') + '</div>';
+    }
+    if (selectedByMe && this._characterConfirmed[String(this.mySeat)]) {
+      html += '<div style="font-size:11px;color:#2ecc71;margin-top:4px;">LOCKED IN ✓</div>';
+    }
+    html += '</div>';
   }
+  grid.innerHTML = html;
+
+  // Bind clicks
+  var self = this;
+  var cards = grid.querySelectorAll('.character-card');
+  for (var c = 0; c < cards.length; c++) {
+    (function(card) {
+      card.addEventListener('click', function() {
+        var charId = card.getAttribute('data-char');
+        self._selectCharacter(charId);
+      });
+    })(cards[c]);
+  }
+
+  // Update confirm button
+  var confirmBtn = $('#btn-confirm-character');
+  if (this._myCharacter && !this._characterConfirmed[String(this.mySeat)]) {
+    confirmBtn.disabled = false;
+  } else {
+    confirmBtn.disabled = true;
+  }
+
+  // Update preview
+  this._renderCharacterPreview();
+
+  // Waiting text
+  var waitingText = $('#character-waiting');
+  if (this._characterConfirmed[String(this.mySeat)]) {
+    waitingText.style.display = '';
+    waitingText.textContent = 'Waiting for other players to lock in...';
+  } else {
+    waitingText.style.display = 'none';
+  }
+};
+
+MonopolyClient.prototype._renderCharacterPreview = function() {
+  var preview = $('#selected-players-preview');
+  if (!preview) return;
+  var html = '';
+  for (var i = 0; i < this.players.length; i++) {
+    var p = this.players[i];
+    var charId = this._characterSelections[String(p.seatIndex)];
+    var ch = charId ? getCharacter(charId) : null;
+    var confirmed = this._characterConfirmed[String(p.seatIndex)];
+    var color = PLAYER_COLORS[p.seatIndex] || '#888';
+    html += '<div style="display:inline-flex;align-items:center;margin:4px 8px;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.08);border:2px solid ' + (confirmed ? '#2ecc71' : 'transparent') + ';">';
+    html += '<span style="font-size:20px;margin-right:6px;">' + (ch ? ch.emoji : '❓') + '</span>';
+    html += '<span style="color:' + color + ';font-size:13px;font-weight:600;">' + escHtml(p.name || p.playerName || '') + '</span>';
+    if (confirmed) html += '<span style="color:#2ecc71;margin-left:4px;">✓</span>';
+    html += '</div>';
+  }
+  preview.innerHTML = html;
+};
+
+MonopolyClient.prototype._selectCharacter = function(charId) {
+  // Check if already confirmed
+  if (this._characterConfirmed[String(this.mySeat)]) return;
+  // Check if taken by someone else
+  for (var seat in this._characterSelections) {
+    if (this._characterSelections.hasOwnProperty(seat) && this._characterSelections[seat] === charId && String(seat) !== String(this.mySeat)) {
+      showToast('That character is already taken!', 'error');
+      return;
+    }
+  }
+  this._myCharacter = charId;
+  this._characterSelections[String(this.mySeat)] = charId;
+  this.socket.emit('game-action', { action: 'select-character', payload: { characterId: charId, seatIndex: this.mySeat } });
+  this._renderCharacterGrid();
+};
+
+MonopolyClient.prototype._confirmCharacter = function() {
+  if (!this._myCharacter) return;
+  if (this._characterConfirmed[String(this.mySeat)]) return;
+  this._characterConfirmed[String(this.mySeat)] = true;
+  this.socket.emit('game-action', { action: 'confirm-character', payload: { characterId: this._myCharacter, seatIndex: this.mySeat } });
+  this._renderCharacterGrid();
+  this._checkAllConfirmed();
+};
+
+MonopolyClient.prototype._checkAllConfirmed = function() {
+  var allConfirmed = true;
+  for (var i = 0; i < this.players.length; i++) {
+    if (!this._characterConfirmed[String(this.players[i].seatIndex)]) {
+      allConfirmed = false;
+      break;
+    }
+  }
+  if (allConfirmed && this.isHost) {
+    this.socket.emit('game-action', { action: 'all-characters-confirmed', payload: { selections: this._characterSelections } });
+  }
+};
+
+MonopolyClient.prototype._startActualGame = function() {
+  this._gameStarted = true;
+  showScreen('screen-game');
+
+  // Init engine players
+  this.engine.reset();
+  for (var i = 0; i < this.players.length; i++) {
+    var p = this.players[i];
+    var seat = p.seatIndex;
+    var charId = this._characterSelections[String(seat)] || null;
+    this.engine.addPlayer(
+      p.name || p.playerName || ('Player ' + (seat + 1)),
+      seat,
+      PLAYER_COLORS[seat],
+      charId
+    );
+  }
+
+  this._bindGameButtons();
   this.renderGame();
+  this.addLog('Game started!');
+  sfx('go');
 };
 
-/* -------- sync -------- */
-
-MonopolyClient.prototype.syncState = function () {
-  this.socket.emit('game-action', { action: 'update-state', payload: this.engine.serialise() });
-};
-
-MonopolyClient.prototype.broadcastAction = function (action, payload) {
-  this.socket.emit('game-action', { action: action, payload: payload });
-};
-
-/* ======== dice ======== */
-
-MonopolyClient.prototype.rollDice = function () {
-  if (this.engine.currentTurn !== this.mySeat || this._animating) return;
-  var p = this.engine.currentPlayer(); if (!p) return;
-  if (p.inJail && this.engine.gamePhase === 'rolling') { this.showJailOptions(); return; }
+/* ────────── DICE ────────── */
+MonopolyClient.prototype.rollDice = function() {
+  if (this._animating) return;
+  var cp = this.engine.currentPlayer();
+  if (!cp || cp.seatIndex !== this.mySeat) {
+    showToast("It's not your turn!", 'error');
+    return;
+  }
   if (this.engine.gamePhase !== 'rolling') return;
-  this.engine.gamePhase = 'animating'; this.updateButtons();
-  this.socket.emit('game-action', { action: 'roll-dice' });
-};
 
-MonopolyClient.prototype.showJailOptions = function () {
-  var p = this.engine.currentPlayer(); if (!p) return;
-  var self = this;
-  var html = '<div style="text-align:center;padding:20px;">' +
-    '<h3 style="margin:0 0 8px;">You are in Jail!</h3>' +
-    '<p style="margin:0 0 16px;">Turn ' + (p.jailTurns + 1) + ' of 3 in jail</p>' +
-    '<div style="display:flex;flex-direction:column;gap:10px;">' +
-    '<button class="btn btn-primary" id="jail-roll">Roll for Doubles</button>' +
-    '<button class="btn btn-warning" id="jail-pay">Pay $50 Fine</button>' +
-    (p.getOutOfJailCards > 0 ? '<button class="btn btn-success" id="jail-card">Use Get Out of Jail Free Card</button>' : '') +
-    '</div></div>';
-  this.showCustomModal(html);
-
-  var doRoll = function () {
-    self.closeCustomModal();
-    self.engine.gamePhase = 'animating'; self.updateButtons();
-    self.socket.emit('game-action', { action: 'roll-dice' });
-  };
-  document.getElementById('jail-roll').addEventListener('click', doRoll);
-  document.getElementById('jail-pay').addEventListener('click', function () {
-    self.closeCustomModal();
-    self.engine.payJailFine(self.mySeat);
-    self.addLog(p.name + ' paid $50 jail fine'); sfx('money'); self.syncState();
-    self.engine.gamePhase = 'animating'; self.updateButtons();
-    self.socket.emit('game-action', { action: 'roll-dice' });
-  });
-  var jcBtn = document.getElementById('jail-card');
-  if (jcBtn) jcBtn.addEventListener('click', function () {
-    self.closeCustomModal();
-    self.engine.useJailCard(self.mySeat);
-    self.addLog(p.name + ' used Get Out of Jail Free card'); sfx('card'); self.syncState();
-    self.engine.gamePhase = 'animating'; self.updateButtons();
-    self.socket.emit('game-action', { action: 'roll-dice' });
-  });
-};
-
-MonopolyClient.prototype.showCustomModal = function (html) {
-  var ov = document.getElementById('custom-modal-overlay');
-  if (!ov) {
-    ov = document.createElement('div'); ov.id = 'custom-modal-overlay';
-    Object.assign(ov.style, { position:'fixed',top:'0',left:'0',width:'100%',height:'100%',background:'rgba(0,0,0,.5)',zIndex:'9999',display:'flex',alignItems:'center',justifyContent:'center' });
-    document.body.appendChild(ov);
+  if (cp.inJail) {
+    this.showJailOptions();
+    return;
   }
-  ov.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.3);">' + html + '</div>';
-  ov.style.display = 'flex';
+
+  this.socket.emit('roll-dice');
 };
 
-MonopolyClient.prototype.closeCustomModal = function () {
-  var ov = document.getElementById('custom-modal-overlay'); if (ov) ov.style.display = 'none';
-};
-
-MonopolyClient.prototype.animateDice = function (d1, d2, cb) {
-  var self = this; this._animating = true;
-  var e1 = $('#die-1'), e2 = $('#die-2'), res = $('#dice-result');
+MonopolyClient.prototype._onDiceRolled = function(data) {
+  var self = this;
+  var d1 = data.die1;
+  var d2 = data.die2;
   sfx('dice');
-  if (e1) e1.className = 'die rolling';
-  if (e2) e2.className = 'die rolling';
-  if (res) res.textContent = '';
-  setTimeout(function () {
-    if (e1) e1.className = 'die show-' + d1;
-    if (e2) e2.className = 'die show-' + d2;
-    if (res) res.textContent = String(d1 + d2);
+
+  this.engine.lastDice = { die1: d1, die2: d2, total: d1 + d2, doubles: d1 === d2 };
+
+  this.animateDice(d1, d2, function() {
+    if (data.seatIndex === self.mySeat) {
+      self.handleMyRoll(data);
+    } else {
+      // Other player rolled, just update display
+      self.renderGame();
+    }
+  });
+};
+
+MonopolyClient.prototype.animateDice = function(d1, d2, callback) {
+  var self = this;
+  this._animating = true;
+  var die1 = $('#die-1');
+  var die2 = $('#die-2');
+  if (!die1 || !die2) { this._animating = false; if (callback) callback(); return; }
+
+  // BUG FIX #2: Target .die wrapper with classes
+  die1.className = 'die rolling';
+  die2.className = 'die rolling';
+
+  setTimeout(function() {
+    die1.className = 'die show-' + d1;
+    die2.className = 'die show-' + d2;
+
+    var result = $('#dice-result');
+    if (result) {
+      result.textContent = d1 + ' + ' + d2 + ' = ' + (d1 + d2);
+      if (d1 === d2) result.textContent += ' DOUBLES!';
+      result.style.fontSize = '16px';
+      result.style.fontWeight = '700';
+    }
+
     self._animating = false;
-    setTimeout(function () { if (cb) cb(); }, 300);
+    if (callback) setTimeout(callback, 200);
   }, 800);
 };
 
-/* ======== handle own roll ======== */
+MonopolyClient.prototype.showJailOptions = function() {
+  var self = this;
+  var cp = this.engine.currentPlayer();
+  var html = '<div class="modal-header"><h3>You\'re in Jail!</h3></div>';
+  html += '<div class="modal-body" style="text-align:center;padding:20px;">';
+  html += '<p style="font-size:14px;margin-bottom:16px;">Turn ' + (cp.jailTurns + 1) + ' of 3 in jail.</p>';
+  html += '<button id="jail-roll" class="btn btn-primary" style="margin:6px;">🎲 Roll for Doubles</button><br>';
+  if (cp.money >= 50) {
+    html += '<button id="jail-pay" class="btn btn-warning" style="margin:6px;">💰 Pay $50 Fine</button><br>';
+  }
+  if (cp.getOutOfJailCards > 0) {
+    html += '<button id="jail-card" class="btn btn-success" style="margin:6px;">🃏 Use Get Out of Jail Card</button><br>';
+  }
+  html += '</div>';
 
-MonopolyClient.prototype.handleMyRoll = function (d) {
-  var p = this.engine.currentPlayer(); if (!p) return;
-  this.addLog(p.name + ' rolled ' + d.die1 + ' + ' + d.die2 + ' = ' + d.total + (d.doubles ? ' (Doubles!)' : ''));
+  this.showCustomModal(html);
 
-  // --- jail roll ---
-  if (p.inJail) {
-    var jr = this.engine.tryJailRoll(this.mySeat, d.die1, d.die2);
-    if (jr.freed) {
-      if (jr.doubles) this.addLog(p.name + ' rolled doubles and is free from jail!');
-      else if (jr.paid) this.addLog(p.name + ' failed 3 times, paid $50 and left jail');
-      sfx('jail');
-      var mr = this.engine.movePlayer(this.mySeat, d.total);
-      if (mr.passedGo) { this.addLog(p.name + ' passed GO, collected $200'); sfx('go'); }
-      this.engine.gamePhase = 'landed'; this.syncState(); this.handleLanding(p.position);
+  setTimeout(function() {
+    var rollBtn = document.getElementById('jail-roll');
+    var payBtn = document.getElementById('jail-pay');
+    var cardBtn = document.getElementById('jail-card');
+
+    if (rollBtn) rollBtn.addEventListener('click', function() {
+      self.closeCustomModal();
+      self.socket.emit('roll-dice');
+    });
+    if (payBtn) payBtn.addEventListener('click', function() {
+      self.closeCustomModal();
+      self.engine.payJailFine(self.mySeat);
+      self.addLog(cp.name + ' paid $50 jail fine');
+      self.broadcastAction('jail-action', { seat: self.mySeat, type: 'pay-fine' });
+      self.syncState();
+      self.engine.gamePhase = 'rolling';
+      self.renderGame();
+    });
+    if (cardBtn) cardBtn.addEventListener('click', function() {
+      self.closeCustomModal();
+      self.engine.useJailCard(self.mySeat);
+      self.addLog(cp.name + ' used Get Out of Jail card');
+      self.broadcastAction('jail-action', { seat: self.mySeat, type: 'use-card' });
+      self.syncState();
+      self.engine.gamePhase = 'rolling';
+      self.renderGame();
+    });
+  }, 50);
+};
+
+MonopolyClient.prototype.handleMyRoll = function(data) {
+  var d1 = data.die1;
+  var d2 = data.die2;
+  var total = d1 + d2;
+  var cp = this.engine.currentPlayer();
+  if (!cp) return;
+
+  // Jail roll
+  if (cp.inJail) {
+    var jailResult = this.engine.tryJailRoll(this.mySeat, d1, d2);
+    if (jailResult.freed) {
+      if (jailResult.forcePay) {
+        this.addLog(cp.name + ' failed 3 jail rolls, paid $50');
+      } else {
+        this.addLog(cp.name + ' rolled doubles and escaped jail!');
+      }
+      // Now move
+      var mr = this.engine.movePlayer(this.mySeat, total);
+      if (mr.passedGo) { this.addLog(cp.name + ' passed GO! +$200'); sfx('go'); }
+      this.renderGame();
+      this.syncState();
+      this.handleLanding(mr.newPos);
     } else {
-      this.addLog(p.name + " didn't roll doubles, still in jail");
-      this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons();
+      this.addLog(cp.name + ' failed to escape jail (' + d1 + '+' + d2 + ')');
+      this.engine.gamePhase = 'action';
+      this.syncState();
+      this.renderGame();
+      this.endTurn();
     }
     return;
   }
 
-  // --- 3 doubles ---
-  if (d.doubles) {
-    this.engine.doublesCount = (this.engine.doublesCount || 0) + 1;
+  // Doubles logic
+  if (d1 === d2) {
+    this.engine.doublesCount++;
     if (this.engine.doublesCount >= 3) {
-      this.addLog(p.name + ' rolled 3 doubles in a row \u2013 Go to Jail!');
-      this.engine.sendToJail(this.mySeat); this.engine.gamePhase = 'action';
-      this.broadcastAction('jail', { playerName: p.name }); sfx('jail');
-      this.syncState(); this.renderGame(); return;
+      this.addLog(cp.name + ' rolled 3 doubles! Go to Jail!');
+      this.engine.sendToJail(this.mySeat);
+      sfx('jail');
+      this.engine.gamePhase = 'action';
+      this.syncState();
+      this.renderGame();
+      this.endTurn();
+      return;
     }
-  } else { this.engine.doublesCount = 0; }
+  }
 
-  // --- normal move ---
-  var mr2 = this.engine.movePlayer(this.mySeat, d.total);
-  if (mr2.passedGo) { this.addLog(p.name + ' passed GO, collected $200'); sfx('go'); }
-  this.engine.gamePhase = 'landed'; this.syncState(); this.handleLanding(p.position);
+  var mr = this.engine.movePlayer(this.mySeat, total);
+  if (mr.passedGo) { this.addLog(cp.name + ' passed GO! +$200'); sfx('go'); }
+  this.addLog(cp.name + ' rolled ' + d1 + '+' + d2 + '=' + total + ', landed on ' + BOARD_DATA[mr.newPos].name);
+  this.renderGame();
+  this.syncState();
+  this.handleLanding(mr.newPos);
 };
 
-/* ======== landing logic ======== */
+/* ────────── LANDING LOGIC ────────── */
+MonopolyClient.prototype.handleLanding = function(pos) {
+  var space = BOARD_DATA[pos];
+  var cp = this.engine.currentPlayer();
+  if (!cp) return;
+  var self = this;
 
-MonopolyClient.prototype.handleLanding = function (pos) {
-  var space = BOARD_DATA[pos]; var p = this.engine.currentPlayer(); if (!p) return;
-  this.renderGame();
+  this.engine.gamePhase = 'landed';
 
   switch (space.type) {
-    case 'property': case 'railroad': case 'utility': {
+    case 'property':
+    case 'railroad':
+    case 'utility':
       var owner = this.engine.getPropertyOwner(pos);
-      if (owner == null) { this.engine.gamePhase = 'landed'; this.showBuyModal(); }
-      else if (owner !== this.mySeat) {
+      if (owner === null) {
+        // Unowned
+        if (cp.money >= space.price) {
+          sfx('card');
+          this.showBuyModal(pos);
+        } else {
+          this.addLog(cp.name + " can't afford " + space.name);
+          this.engine.gamePhase = 'action';
+          this.renderGame();
+        }
+      } else if (owner !== this.mySeat) {
+        var ownerPlayer = this.engine.getPlayer(owner);
         var ps = this.engine.propertyState[pos];
-        if (ps && ps.mortgaged) { this.addLog(space.name + ' is mortgaged, no rent due'); this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons(); }
-        else this.showRentModal(pos);
-      } else { this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons(); }
+        if (ps && ps.mortgaged) {
+          this.addLog(space.name + ' is mortgaged, no rent');
+          this.engine.gamePhase = 'action';
+          this.renderGame();
+        } else if (ownerPlayer && ownerPlayer.inJail) {
+          this.addLog(space.name + ' owner is in jail, no rent');
+          this.engine.gamePhase = 'action';
+          this.renderGame();
+        } else {
+          sfx('rent');
+          // BUG FIX #3: Store creditor BEFORE showing modal
+          this._rentCreditor = owner;
+          this.showRentModal(pos);
+        }
+      } else {
+        // Own property
+        this.engine.gamePhase = 'action';
+        this.renderGame();
+      }
       break;
-    }
-    case 'tax': {
-      var amt = this.engine.payTax(this.mySeat, pos);
-      this.addLog(p.name + ' paid $' + amt + ' in ' + space.name); sfx('money');
-      this.engine.gamePhase = 'action'; this.syncState(); this.checkBankrupt(p); this.updateButtons(); break;
-    }
-    case 'chance': { var c = this.engine.drawChance(); this.showCardModal('Chance', c); break; }
-    case 'chest':  { var c2 = this.engine.drawChest(); this.showCardModal('Community Chest', c2); break; }
-    case 'go-to-jail': {
+
+    case 'tax':
+      sfx('rent');
+      this.engine.payTax(this.mySeat, pos);
+      this.addLog(cp.name + ' paid $' + space.price + ' tax');
+      this.engine.gamePhase = 'action';
+      this.syncState();
+      this.renderGame();
+      this.checkBankrupt(cp, null);
+      break;
+
+    case 'chance':
+      sfx('card');
+      var chCard = this.engine.drawChance();
+      this._pendingCard = chCard;
+      this._pendingCardType = 'chance';
+      this.showCardModal('Chance', chCard);
+      break;
+
+    case 'chest':
+      sfx('card');
+      var ccCard = this.engine.drawChest();
+      this._pendingCard = ccCard;
+      this._pendingCardType = 'chest';
+      this.showCardModal('Community Chest', ccCard);
+      break;
+
+    case 'go-to-jail':
+      sfx('jail');
       this.engine.sendToJail(this.mySeat);
-      this.addLog(p.name + ' went to Jail!'); this.broadcastAction('jail', { playerName: p.name }); sfx('jail');
-      this.engine.gamePhase = 'action'; this.syncState(); this.renderGame(); this.updateButtons(); break;
-    }
-    case 'free-parking': {
-      var pot = this.engine.collectFreeParking(this.mySeat);
-      if (pot > 0) { this.addLog(p.name + ' collected $' + pot + ' from Free Parking!'); this.broadcastAction('free-parking', { playerName: p.name, amount: pot }); sfx('money'); }
-      this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons(); break;
-    }
-    default: this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons();
+      this.addLog(cp.name + ' was sent to Jail!');
+      this.engine.gamePhase = 'action';
+      this.syncState();
+      this.renderGame();
+      this.endTurn();
+      break;
+
+    case 'free-parking':
+      var fpAmount = this.engine.collectFreeParking(this.mySeat);
+      if (fpAmount > 0) {
+        sfx('money');
+        this.addLog(cp.name + ' collected $' + fpAmount + ' from Free Parking!');
+      }
+      this.engine.gamePhase = 'action';
+      this.syncState();
+      this.renderGame();
+      break;
+
+    case 'go':
+      this.engine.gamePhase = 'action';
+      this.renderGame();
+      break;
+
+    case 'jail':
+      // Just visiting
+      this.engine.gamePhase = 'action';
+      this.renderGame();
+      break;
+
+    default:
+      this.engine.gamePhase = 'action';
+      this.renderGame();
+      break;
   }
 };
 
-/* ======== buy modal ======== */
+/* ────────── MODALS ────────── */
+MonopolyClient.prototype.openModal = function(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = 'flex';
+};
 
-MonopolyClient.prototype.showBuyModal = function () {
-  var p = this.engine.currentPlayer(); if (!p) return;
-  var pos = p.position; var space = BOARD_DATA[pos]; if (!space || !space.price) return;
-  var colorEl = $('#buy-card-color');
-  if (colorEl) colorEl.style.background = space.group ? 'var(--prop-' + space.group + ',#888)' : (space.type === 'railroad' ? '#333' : '#888');
-  var ne = $('#buy-card-name'); if (ne) ne.textContent = space.name;
-  var pe = $('#buy-card-price'); if (pe) pe.textContent = '$' + space.price;
-  if (space.rent) {
-    ['buy-rent-base','buy-rent-1h','buy-rent-2h','buy-rent-3h','buy-rent-4h','buy-rent-hotel'].forEach(function (id, i) { var e = $('#' + id); if (e) e.textContent = '$' + space.rent[i]; });
-  } else {
-    ['buy-rent-base','buy-rent-1h','buy-rent-2h','buy-rent-3h','buy-rent-4h','buy-rent-hotel'].forEach(function (id) { var e = $('#' + id); if (e) e.textContent = '\u2014'; });
-    if (space.type === 'railroad') { var e1 = $('#buy-rent-base'); if (e1) e1.textContent = '$25\u2013$200'; }
-    if (space.type === 'utility')  { var e2 = $('#buy-rent-base'); if (e2) e2.textContent = '4\u00d7/10\u00d7 dice'; }
+MonopolyClient.prototype.closeModal = function(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+};
+
+MonopolyClient.prototype.showCustomModal = function(html) {
+  var content = $('#custom-modal-content');
+  if (content) content.innerHTML = html;
+  this.openModal('modal-custom');
+};
+
+MonopolyClient.prototype.closeCustomModal = function() {
+  this.closeModal('modal-custom');
+};
+
+/* ── BUY MODAL ── */
+MonopolyClient.prototype.showBuyModal = function(pos) {
+  var space = BOARD_DATA[pos];
+  if (!space) return;
+  this._buyPos = pos;
+
+  var colorBand = $('#buy-color-band');
+  if (colorBand) {
+    if (space.group && GROUP_COLORS[space.group]) {
+      colorBand.style.background = GROUP_COLORS[space.group];
+      colorBand.style.display = '';
+    } else {
+      colorBand.style.display = 'none';
+    }
   }
-  var hc = $('#buy-house-cost'); if (hc) hc.textContent = space.houseCost ? ('$' + space.houseCost) : '\u2014';
-  var cb = $('#modal-buy-confirm'); if (cb) cb.disabled = p.money < space.price;
+
+  $('#buy-property-name').textContent = space.name;
+  $('#buy-property-price').textContent = '$' + space.price;
+
+  if (space.rent) {
+    $('#buy-rent-base').textContent = '$' + space.rent[0];
+    $('#buy-rent-1h').textContent = '$' + (space.rent[1] || '-');
+    $('#buy-rent-2h').textContent = '$' + (space.rent[2] || '-');
+    $('#buy-rent-3h').textContent = '$' + (space.rent[3] || '-');
+    $('#buy-rent-4h').textContent = '$' + (space.rent[4] || '-');
+    $('#buy-rent-hotel').textContent = '$' + (space.rent[5] || '-');
+  } else {
+    // Railroad or utility
+    if (space.type === 'railroad') {
+      $('#buy-rent-base').textContent = '$25';
+      $('#buy-rent-1h').textContent = '2 RR: $50';
+      $('#buy-rent-2h').textContent = '3 RR: $100';
+      $('#buy-rent-3h').textContent = '4 RR: $200';
+      $('#buy-rent-4h').textContent = '-';
+      $('#buy-rent-hotel').textContent = '-';
+    } else {
+      $('#buy-rent-base').textContent = '4x dice';
+      $('#buy-rent-1h').textContent = '2 util: 10x';
+      $('#buy-rent-2h').textContent = '-';
+      $('#buy-rent-3h').textContent = '-';
+      $('#buy-rent-4h').textContent = '-';
+      $('#buy-rent-hotel').textContent = '-';
+    }
+  }
+
+  $('#buy-house-cost').textContent = space.houseCost ? ('$' + space.houseCost) : 'N/A';
+
   this.openModal('modal-buy');
 };
 
-MonopolyClient.prototype.confirmBuy = function () {
-  var p = this.engine.currentPlayer(); if (!p) return;
-  var pos = p.position; var space = BOARD_DATA[pos];
-  if (this.engine.buyProperty(this.mySeat, pos)) {
-    this.addLog(p.name + ' bought ' + space.name + ' for $' + space.price);
-    this.broadcastAction('property-bought', { playerName: p.name, propertyName: space.name, price: space.price }); sfx('buy');
+MonopolyClient.prototype.confirmBuy = function() {
+  var pos = this._buyPos;
+  if (pos === undefined) return;
+  var ok = this.engine.buyProperty(this.mySeat, pos);
+  if (ok) {
+    var space = BOARD_DATA[pos];
+    sfx('buy');
+    this.addLog(this.engine.currentPlayer().name + ' bought ' + space.name + ' for $' + space.price);
+    this.broadcastAction('property-bought', { seat: this.mySeat, pos: pos });
+    this.syncState();
   }
-  this.closeModal('modal-buy'); this.engine.gamePhase = 'action'; this.syncState(); this.renderGame(); this.updateButtons();
+  this.closeModal('modal-buy');
+  this.engine.gamePhase = 'action';
+  this.renderGame();
 };
 
-MonopolyClient.prototype.auctionProperty = function () {
-  showToast('Auction not available \u2013 property returned to bank');
-  this.closeModal('modal-buy'); this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons();
+MonopolyClient.prototype.passBuy = function() {
+  this.closeModal('modal-buy');
+  this.engine.gamePhase = 'action';
+  this.renderGame();
 };
 
-MonopolyClient.prototype.passBuy = function () {
-  this.closeModal('modal-buy'); this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons();
-};
+/* ── RENT MODAL ── */
+MonopolyClient.prototype.showRentModal = function(pos) {
+  var space = BOARD_DATA[pos];
+  this._rentPos = pos;
+  var rent = this.engine.calculateRent(pos, this.engine.lastDice.total);
+  this._rentAmount = rent;
+  var owner = this.engine.getPlayer(this._rentCreditor);
 
-/* ======== rent modal ======== */
+  $('#rent-property-name').textContent = space.name;
+  $('#rent-owner-name').textContent = owner ? owner.name : 'Unknown';
+  $('#rent-amount').textContent = '$' + rent;
 
-MonopolyClient.prototype.showRentModal = function (pos) {
-  var space = BOARD_DATA[pos]; var ps = this.engine.propertyState[pos]; if (!ps) return;
-  var owner = this.engine.getPlayer(ps.owner);
-  var dt = this.engine.lastDice.total || 2;
-  var rent = this.engine.calculateRent(pos, dt);
-  if (this.rentMultiplier > 1) { rent *= this.rentMultiplier; this.rentMultiplier = 1; }
-  if (this.utilityOverride > 0) { rent = dt * this.utilityOverride; this.utilityOverride = 0; }
-  var ne = $('#rent-property-name'); if (ne) ne.textContent = space.name;
-  var oe = $('#rent-owner-name'); if (oe) oe.textContent = owner ? owner.name : '?';
-  var ae = $('#rent-amount'); if (ae) ae.textContent = '$' + rent;
-  this._pendingRent = { pos: pos, rent: rent, ownerSeat: ps.owner };
   this.openModal('modal-rent');
 };
 
-MonopolyClient.prototype.payRentConfirm = function () {
-  var p = this.engine.currentPlayer(); if (!p || !this._pendingRent) return;
-  var rent = this._pendingRent.rent; var os = this._pendingRent.ownerSeat;
-  var owner = this.engine.getPlayer(os);
-  p.money -= rent; if (owner) owner.money += rent;
-  this.addLog(p.name + ' paid $' + rent + ' rent to ' + (owner ? owner.name : '?'));
-  this.broadcastAction('rent-paid', { payerName: p.name, ownerName: owner ? owner.name : '?', amount: rent }); sfx('rent');
-  this._pendingRent = null;
-  this.closeModal('modal-rent'); this.engine.gamePhase = 'action'; this.syncState();
-  this.checkBankrupt(p); this.renderGame(); this.updateButtons();
+MonopolyClient.prototype.payRent = function() {
+  var cp = this.engine.currentPlayer();
+  var rent = this._rentAmount || 0;
+  var creditor = this._rentCreditor;
+
+  cp.money -= rent;
+  var ownerP = this.engine.getPlayer(creditor);
+  if (ownerP) ownerP.money += rent;
+
+  this.addLog(cp.name + ' paid $' + rent + ' rent to ' + (ownerP ? ownerP.name : 'bank'));
+  this.broadcastAction('rent-paid', { seat: this.mySeat, creditor: creditor, amount: rent, pos: this._rentPos });
+  this.syncState();
+  this.closeModal('modal-rent');
+  this.engine.gamePhase = 'action';
+  this.renderGame();
+  this.checkBankrupt(cp, creditor);
 };
 
-/* ======== card modal ======== */
-
-MonopolyClient.prototype.showCardModal = function (type, card) {
-  var te = $('#card-type'); if (te) te.textContent = type;
-  var tx = $('#card-text'); if (tx) tx.textContent = card.text;
-  this.pendingCardAction = card; sfx('card');
-  var cp = this.engine.currentPlayer();
-  this.broadcastAction('drew-card', { playerName: cp ? cp.name : '', text: card.text, type: type });
+/* ── CARD MODAL ── */
+MonopolyClient.prototype.showCardModal = function(type, card) {
+  $('#card-type').textContent = type;
+  $('#card-icon').textContent = type === 'Chance' ? '❓' : '🃏';
+  $('#card-text').textContent = card.text;
   this.openModal('modal-card');
 };
 
-MonopolyClient.prototype.cardOk = function () {
+MonopolyClient.prototype.cardOk = function() {
   this.closeModal('modal-card');
-  var card = this.pendingCardAction; if (!card) return; this.pendingCardAction = null;
-  var p = this.engine.currentPlayer(); if (!p) return;
-  var r = this.engine.executeCard(this.mySeat, card);
-  switch (r.type) {
-    case 'moved':
-      this.syncState(); this.renderGame();
-      if (r.landAction) {
-        if (r.rentMultiplier) this.rentMultiplier = r.rentMultiplier;
-        if (r.utilityMultiplier) this.utilityOverride = r.utilityMultiplier;
-        this.handleLanding(p.position);
-      } else { this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons(); }
-      break;
-    case 'jail':
-      this.broadcastAction('jail', { playerName: p.name }); sfx('jail');
-      this.engine.gamePhase = 'action'; this.syncState(); this.renderGame(); this.updateButtons(); break;
-    case 'collect':
-      this.addLog(p.name + ' collected $' + r.amount); sfx('money');
-      this.engine.gamePhase = 'action'; this.syncState(); this.renderGame(); this.updateButtons(); break;
-    case 'pay':
-      this.addLog(p.name + ' paid $' + r.amount); sfx('money');
-      this.engine.gamePhase = 'action'; this.syncState(); this.checkBankrupt(p); this.renderGame(); this.updateButtons(); break;
-    case 'get-out-of-jail':
-      this.addLog(p.name + ' got a Get Out of Jail Free card');
-      this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons(); break;
+  var card = this._pendingCard;
+  var cardType = this._pendingCardType;
+  if (!card) { this.engine.gamePhase = 'action'; this.renderGame(); return; }
+
+  this._pendingCard = null;
+  this._pendingCardType = null;
+
+  var result = this.engine.executeCard(this.mySeat, card);
+  var cp = this.engine.currentPlayer();
+
+  this.broadcastAction('drew-card', { seat: this.mySeat, cardType: cardType, card: card, result: result });
+
+  // Handle post-card actions
+  switch (card.action) {
+    case 'move-to':
+    case 'move-back':
+    case 'nearest-railroad':
+    case 'nearest-utility':
+      this.syncState();
+      this.renderGame();
+      // May need to handle landing at new position
+      var newPos = cp.position;
+      if (card.action === 'go-to-jail') {
+        this.engine.gamePhase = 'action';
+        this.renderGame();
+        this.endTurn();
+      } else {
+        this.handleLanding(newPos);
+      }
+      return;
+    case 'go-to-jail':
+      sfx('jail');
+      this.addLog(cp.name + ' was sent to Jail by card!');
+      this.engine.gamePhase = 'action';
+      this.syncState();
+      this.renderGame();
+      this.endTurn();
+      return;
     default:
-      this.engine.gamePhase = 'action'; this.syncState(); this.updateButtons();
+      break;
   }
+
+  if (result.data && result.data.cost !== undefined) {
+    this.addLog(cp.name + ' paid $' + result.data.cost + ' in repairs');
+  }
+  if (result.data && result.data.amount !== undefined && card.action === 'collect') {
+    this.addLog(cp.name + ' collected $' + result.data.amount);
+  }
+
+  this.engine.gamePhase = 'action';
+  this.syncState();
+  this.renderGame();
+  this.checkBankrupt(cp, null);
 };
 
-/* ======== build modal ======== */
+/* ── BUILD MODAL ── */
+MonopolyClient.prototype.showBuildModal = function() {
+  var self = this;
+  var cp = this.engine.currentPlayer();
+  if (!cp || cp.seatIndex !== this.mySeat) return;
 
-MonopolyClient.prototype.showBuildModal = function () {
-  if (this.engine.currentTurn !== this.mySeat) return;
-  var p = this.engine.currentPlayer(); if (!p) return;
-  var list = $('#build-list'); if (!list) return; list.innerHTML = '';
-  var self = this; var any = false;
+  var list = $('#build-list');
+  if (!list) return;
+  var html = '';
+  var hasBuildable = false;
 
-  p.properties.forEach(function (pos) {
-    var space = BOARD_DATA[pos]; if (space.type !== 'property') return;
-    var ps = self.engine.propertyState[pos]; if (!ps) return;
-    var cb = self.engine.canBuildOn(self.mySeat, pos);
-    var cs = self.engine.canSellHouseOn(self.mySeat, pos);
-    if (!cb && !cs && ps.houses === 0) return;
-    any = true;
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid #eee;';
-    var hl = ps.houses === 5 ? '\uD83C\uDFE8 Hotel' : ps.houses > 0 ? '\uD83C\uDFE0 \u00d7' + ps.houses : 'Empty';
-    var btns = '';
-    if (cs) btns += '<button class="btn btn-sm btn-danger build-sell" data-pos="' + pos + '">Sell</button> ';
-    if (cb) btns += '<button class="btn btn-sm btn-success build-buy" data-pos="' + pos + '">Build $' + space.houseCost + '</button>';
-    row.innerHTML = '<div><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:var(--prop-' + space.group + ');margin-right:6px;vertical-align:middle;"></span>' +
-      '<strong>' + space.name + '</strong> <span style="margin-left:6px;font-size:12px;color:#666;">' + hl + '</span></div>' +
-      '<div style="display:flex;gap:6px;">' + btns + '</div>';
-    list.appendChild(row);
-  });
+  for (var i = 0; i < cp.properties.length; i++) {
+    var pos = cp.properties[i];
+    var space = BOARD_DATA[pos];
+    if (space.type !== 'property') continue;
+    var ps = this.engine.propertyState[pos];
+    var houses = ps ? ps.houses || 0 : 0;
+    var canBuild = this.engine.canBuildOn(this.mySeat, pos);
+    var canSell = this.engine.canSellHouseOn(this.mySeat, pos);
 
-  if (!any) list.innerHTML = '<p style="padding:16px;text-align:center;color:#888;">No buildable properties. Need complete color set with no mortgages.</p>';
+    if (!canBuild && !canSell) continue;
+    hasBuildable = true;
 
-  $$('.build-buy', list).forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var pos = parseInt(btn.dataset.pos);
-      if (self.engine.buildHouse(self.mySeat, pos)) {
-        var sp = BOARD_DATA[pos];
-        self.addLog(p.name + ' built on ' + sp.name);
-        self.broadcastAction('built-house', { playerName: p.name, propertyName: sp.name }); sfx('build');
-        self.syncState(); self.renderGame(); self.showBuildModal();
-      }
-    });
-  });
-  $$('.build-sell', list).forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var pos = parseInt(btn.dataset.pos);
-      if (self.engine.sellHouse(self.mySeat, pos)) {
-        self.addLog(p.name + ' sold a building on ' + BOARD_DATA[pos].name); sfx('money');
-        self.syncState(); self.renderGame(); self.showBuildModal();
-      }
-    });
-  });
+    var houseLabel = houses === 5 ? '🏨 Hotel' : ('🏠 x' + houses);
+    var groupColor = GROUP_COLORS[space.group] || '#888';
+
+    html += '<div class="build-row" style="display:flex;align-items:center;justify-content:space-between;padding:8px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px;border-left:4px solid ' + groupColor + ';">';
+    html += '<div><div style="font-size:13px;font-weight:600;">' + space.name + '</div>';
+    html += '<div style="font-size:11px;color:#aaa;">' + houseLabel + ' | Cost: $' + space.houseCost + '</div></div>';
+    html += '<div>';
+    if (canBuild) {
+      html += '<button class="btn btn-success btn-sm build-buy-btn" data-pos="' + pos + '" style="margin:2px;padding:4px 10px;font-size:12px;">+ Build ($' + space.houseCost + ')</button>';
+    }
+    if (canSell) {
+      html += '<button class="btn btn-danger btn-sm build-sell-btn" data-pos="' + pos + '" style="margin:2px;padding:4px 10px;font-size:12px;">- Sell ($' + Math.floor(space.houseCost / 2) + ')</button>';
+    }
+    html += '</div></div>';
+  }
+
+  if (!hasBuildable) {
+    html = '<p style="text-align:center;color:#aaa;padding:20px;">No buildable properties. You need a full color group with no mortgaged properties.</p>';
+  }
+
+  list.innerHTML = html;
   this.openModal('modal-build');
+
+  // Bind build/sell buttons
+  setTimeout(function() {
+    var buyBtns = list.querySelectorAll('.build-buy-btn');
+    var sellBtns = list.querySelectorAll('.build-sell-btn');
+    for (var b = 0; b < buyBtns.length; b++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          var p = parseInt(btn.getAttribute('data-pos'));
+          if (self.engine.buildHouse(self.mySeat, p)) {
+            sfx('build');
+            self.addLog(cp.name + ' built on ' + BOARD_DATA[p].name);
+            self.broadcastAction('built-house', { seat: self.mySeat, pos: p });
+            self.syncState();
+            self.closeModal('modal-build');
+            self.showBuildModal(); // Refresh
+          }
+        });
+      })(buyBtns[b]);
+    }
+    for (var s = 0; s < sellBtns.length; s++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          var p = parseInt(btn.getAttribute('data-pos'));
+          if (self.engine.sellHouse(self.mySeat, p)) {
+            self.addLog(cp.name + ' sold house on ' + BOARD_DATA[p].name);
+            self.broadcastAction('sold-house', { seat: self.mySeat, pos: p });
+            self.syncState();
+            self.closeModal('modal-build');
+            self.showBuildModal(); // Refresh
+          }
+        });
+      })(sellBtns[s]);
+    }
+  }, 50);
 };
 
-MonopolyClient.prototype.confirmBuild = function () { this.closeModal('modal-build'); this.renderGame(); };
-
-/* ======== mortgage modal ======== */
-
-MonopolyClient.prototype.showMortgageModal = function () {
-  var mp = this.engine.getPlayer(this.mySeat); if (!mp) return;
-  this._showMortgageFor(mp);
-};
-
-MonopolyClient.prototype._showMortgageFor = function (p) {
-  var list = $('#mortgage-list'); if (!list) return; list.innerHTML = '';
+/* ── MORTGAGE MODAL ── */
+MonopolyClient.prototype.showMortgageModal = function() {
   var self = this;
-  if (p.properties.length === 0) { list.innerHTML = '<p style="padding:16px;text-align:center;color:#888;">No properties.</p>'; this.openModal('modal-mortgage'); return; }
+  var cp = this.engine.currentPlayer();
+  if (!cp || cp.seatIndex !== this.mySeat) return;
 
-  p.properties.forEach(function (pos) {
-    var space = BOARD_DATA[pos]; var ps = self.engine.propertyState[pos]; if (!ps) return;
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid #eee;';
-    var cm = self.engine.canMortgage(p.seatIndex, pos); var uc = Math.floor(space.mortgage * 1.1);
-    var cd = space.group ? '<span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:var(--prop-' + space.group + ');margin-right:6px;vertical-align:middle;"></span>' : '';
-    var ab;
-    if (ps.mortgaged) ab = '<button class="btn btn-sm btn-success unmort-btn" data-pos="' + pos + '"' + (p.money < uc ? ' disabled' : '') + '>Unmortgage $' + uc + '</button>';
-    else if (cm) ab = '<button class="btn btn-sm btn-warning mort-btn" data-pos="' + pos + '">Mortgage $' + space.mortgage + '</button>';
-    else ab = '<span style="font-size:12px;color:#aaa;">Sell houses first</span>';
-    row.innerHTML = '<div>' + cd + '<strong>' + space.name + '</strong>' + (ps.mortgaged ? ' <span style="color:#e74c3c;font-size:11px;">(MORTGAGED)</span>' : '') + '</div><div>' + ab + '</div>';
-    list.appendChild(row);
-  });
+  var list = $('#mortgage-list');
+  if (!list) return;
+  var html = '';
 
-  $$('.mort-btn', list).forEach(function (btn) { btn.addEventListener('click', function () {
-    var pos = parseInt(btn.dataset.pos);
-    if (self.engine.mortgageProperty(p.seatIndex, pos)) { self.addLog(p.name + ' mortgaged ' + BOARD_DATA[pos].name); sfx('money'); self.syncState(); self.renderGame(); self._showMortgageFor(p); }
-  }); });
-  $$('.unmort-btn', list).forEach(function (btn) { btn.addEventListener('click', function () {
-    var pos = parseInt(btn.dataset.pos);
-    if (self.engine.unmortgageProperty(p.seatIndex, pos)) { self.addLog(p.name + ' unmortgaged ' + BOARD_DATA[pos].name); sfx('money'); self.syncState(); self.renderGame(); self._showMortgageFor(p); }
-  }); });
+  for (var i = 0; i < cp.properties.length; i++) {
+    var pos = cp.properties[i];
+    var space = BOARD_DATA[pos];
+    var ps = this.engine.propertyState[pos];
+    if (!ps) continue;
+    var mortgaged = ps.mortgaged;
+    var canM = this.engine.canMortgage(this.mySeat, pos);
+    var unmortCost = Math.floor(space.mortgage * 1.1);
+    var canU = mortgaged && cp.money >= unmortCost;
 
+    var groupColor = GROUP_COLORS[space.group] || '#888';
+    html += '<div class="mortgage-row" style="display:flex;align-items:center;justify-content:space-between;padding:8px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px;border-left:4px solid ' + groupColor + ';">';
+    html += '<div><div style="font-size:13px;font-weight:600;">' + space.name + (mortgaged ? ' <span style="color:#e74c3c;">(MORTGAGED)</span>' : '') + '</div>';
+    html += '<div style="font-size:11px;color:#aaa;">Mortgage: $' + space.mortgage + ' | Unmortgage: $' + unmortCost + '</div></div>';
+    html += '<div>';
+    if (canM && !mortgaged) {
+      html += '<button class="btn btn-warning btn-sm mortgage-btn" data-pos="' + pos + '" style="margin:2px;padding:4px 10px;font-size:12px;">Mortgage (+$' + space.mortgage + ')</button>';
+    }
+    if (canU && mortgaged) {
+      html += '<button class="btn btn-success btn-sm unmortgage-btn" data-pos="' + pos + '" style="margin:2px;padding:4px 10px;font-size:12px;">Unmortgage (-$' + unmortCost + ')</button>';
+    }
+    html += '</div></div>';
+  }
+
+  if (!html) {
+    html = '<p style="text-align:center;color:#aaa;padding:20px;">No properties to manage.</p>';
+  }
+
+  list.innerHTML = html;
   this.openModal('modal-mortgage');
+
+  setTimeout(function() {
+    var mBtns = list.querySelectorAll('.mortgage-btn');
+    var uBtns = list.querySelectorAll('.unmortgage-btn');
+    for (var m = 0; m < mBtns.length; m++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          var p = parseInt(btn.getAttribute('data-pos'));
+          if (self.engine.mortgageProperty(self.mySeat, p)) {
+            self.addLog(cp.name + ' mortgaged ' + BOARD_DATA[p].name);
+            self.broadcastAction('mortgage-action', { seat: self.mySeat, pos: p, type: 'mortgage' });
+            self.syncState();
+            self.closeModal('modal-mortgage');
+            self.showMortgageModal();
+          }
+        });
+      })(mBtns[m]);
+    }
+    for (var u = 0; u < uBtns.length; u++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          var p = parseInt(btn.getAttribute('data-pos'));
+          if (self.engine.unmortgageProperty(self.mySeat, p)) {
+            self.addLog(cp.name + ' unmortgaged ' + BOARD_DATA[p].name);
+            self.broadcastAction('mortgage-action', { seat: self.mySeat, pos: p, type: 'unmortgage' });
+            self.syncState();
+            self.closeModal('modal-mortgage');
+            self.showMortgageModal();
+          }
+        });
+      })(uBtns[u]);
+    }
+  }, 50);
 };
 
-/* ======== trade modal ======== */
-
-MonopolyClient.prototype.showTradeModal = function () {
-  var me = this.engine.getPlayer(this.mySeat); if (!me) return;
+/* ── TRADE MODAL ── */
+MonopolyClient.prototype.showTradeModal = function() {
   var self = this;
+  var cp = this.engine.currentPlayer();
+  if (!cp) return;
 
-  // partner select
-  var sel = $('#trade-partner');
-  if (sel) {
-    sel.innerHTML = '<option value="">Select player\u2026</option>';
-    this.engine.activePlayers().forEach(function (p) {
-      if (p.seatIndex !== self.mySeat) sel.innerHTML += '<option value="' + p.seatIndex + '">' + escHtml(p.name) + '</option>';
-    });
-    // replace to clear old listeners
-    var ns = sel.cloneNode(true); sel.parentNode.replaceChild(ns, sel);
-    ns.addEventListener('change', updateTheirs);
+  // Populate partner select
+  var partnerSel = $('#trade-partner-select');
+  var html = '';
+  var active = this.engine.activePlayers();
+  for (var i = 0; i < active.length; i++) {
+    if (active[i].seatIndex !== this.mySeat) {
+      html += '<option value="' + active[i].seatIndex + '">' + escHtml(active[i].name) + '</option>';
+    }
+  }
+  partnerSel.innerHTML = html;
+
+  // My properties
+  var offerList = $('#trade-offer-properties');
+  html = '';
+  for (var j = 0; j < cp.properties.length; j++) {
+    var pos = cp.properties[j];
+    var space = BOARD_DATA[pos];
+    var ps = this.engine.propertyState[pos];
+    if (ps && (ps.houses || 0) > 0) continue; // Can't trade with houses
+    html += '<label style="display:block;font-size:12px;padding:3px 0;"><input type="checkbox" class="trade-offer-cb" value="' + pos + '"> ' + space.name + '</label>';
+  }
+  offerList.innerHTML = html || '<p style="color:#aaa;font-size:12px;">No tradeable properties</p>';
+
+  // Update want list on partner change
+  function updateWantList() {
+    var partnerSeat = parseInt(partnerSel.value);
+    var partner = self.engine.getPlayer(partnerSeat);
+    var wantList = $('#trade-want-properties');
+    var wh = '';
+    if (partner) {
+      for (var k = 0; k < partner.properties.length; k++) {
+        var pp = partner.properties[k];
+        var sp = BOARD_DATA[pp];
+        var pps = self.engine.propertyState[pp];
+        if (pps && (pps.houses || 0) > 0) continue;
+        wh += '<label style="display:block;font-size:12px;padding:3px 0;"><input type="checkbox" class="trade-want-cb" value="' + pp + '"> ' + sp.name + '</label>';
+      }
+    }
+    wantList.innerHTML = wh || '<p style="color:#aaa;font-size:12px;">No tradeable properties</p>';
   }
 
-  var cy = $('#trade-cash-yours'); if (cy) cy.value = 0;
-  var ct = $('#trade-cash-theirs'); if (ct) ct.value = 0;
+  partnerSel.addEventListener('change', updateWantList);
+  updateWantList();
 
-  var py = $('#trade-props-yours');
-  if (py) {
-    py.innerHTML = '';
-    me.properties.forEach(function (pos) {
-      var space = BOARD_DATA[pos]; var ps = self.engine.propertyState[pos];
-      if (ps && ps.houses > 0) return;
-      var lb = document.createElement('label');
-      lb.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;';
-      lb.innerHTML = '<input type="checkbox" value="' + pos + '">' +
-        (space.group ? '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--prop-' + space.group + ')"></span>' : '') +
-        escHtml(space.name) + (ps && ps.mortgaged ? ' (M)' : '');
-      py.appendChild(lb);
-    });
-  }
+  $('#trade-offer-cash').value = 0;
+  $('#trade-want-cash').value = 0;
 
-  function updateTheirs() {
-    var pt = $('#trade-props-theirs'); var s = $('#trade-partner');
-    if (!pt || !s) return; pt.innerHTML = '';
-    var seat = parseInt(s.value); if (isNaN(seat)) return;
-    var partner = self.engine.getPlayer(seat); if (!partner) return;
-    partner.properties.forEach(function (pos) {
-      var space = BOARD_DATA[pos]; var ps = self.engine.propertyState[pos];
-      if (ps && ps.houses > 0) return;
-      var lb = document.createElement('label');
-      lb.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;';
-      lb.innerHTML = '<input type="checkbox" value="' + pos + '">' +
-        (space.group ? '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--prop-' + space.group + ')"></span>' : '') +
-        escHtml(space.name) + (ps && ps.mortgaged ? ' (M)' : '');
-      pt.appendChild(lb);
-    });
-  }
   this.openModal('modal-trade');
 };
 
-MonopolyClient.prototype.sendTradeOffer = function () {
-  var sel = $('#trade-partner'); var rs = parseInt(sel ? sel.value : '');
-  if (isNaN(rs)) { showToast('Select a trade partner'); return; }
-  var oc = parseInt($('#trade-cash-yours') ? $('#trade-cash-yours').value : '0') || 0;
-  var rc = parseInt($('#trade-cash-theirs') ? $('#trade-cash-theirs').value : '0') || 0;
-  var op = $$('#trade-props-yours input:checked').map(function (c) { return parseInt(c.value); });
-  var rp = $$('#trade-props-theirs input:checked').map(function (c) { return parseInt(c.value); });
-  if (!oc && !rc && !op.length && !rp.length) { showToast('Add something to the trade'); return; }
-  var me = this.engine.getPlayer(this.mySeat);
-  if (me && oc > me.money) { showToast("You don't have enough cash"); return; }
+MonopolyClient.prototype.sendTradeOffer = function() {
+  var partnerSeat = parseInt($('#trade-partner-select').value);
+  var offerCash = parseInt($('#trade-offer-cash').value) || 0;
+  var wantCash = parseInt($('#trade-want-cash').value) || 0;
+
+  var offerProps = [];
+  var offerCbs = $$('.trade-offer-cb:checked');
+  for (var i = 0; i < offerCbs.length; i++) offerProps.push(parseInt(offerCbs[i].value));
+
+  var wantProps = [];
+  var wantCbs = $$('.trade-want-cb:checked');
+  for (var j = 0; j < wantCbs.length; j++) wantProps.push(parseInt(wantCbs[j].value));
+
+  if (offerCash === 0 && wantCash === 0 && offerProps.length === 0 && wantProps.length === 0) {
+    showToast('You must offer or want something!', 'error');
+    return;
+  }
+
+  var cp = this.engine.currentPlayer();
+  if (offerCash > cp.money) {
+    showToast("You don't have that much cash!", 'error');
+    return;
+  }
+
   this.closeModal('modal-trade');
-  this.broadcastAction('trade-offer', { offererSeat: this.mySeat, offererName: me ? me.name : '', receiverSeat: rs, offerCash: oc, receiverCash: rc, offerProps: op, receiverProps: rp });
-  showToast('Trade offer sent!');
-};
-
-MonopolyClient.prototype.showIncomingTrade = function (offer) {
-  var off = this.engine.getPlayer(offer.offererSeat);
-  var me  = this.engine.getPlayer(this.mySeat);
-  if (!off || !me) return; var self = this;
-
-  var h = '<div style="padding:20px;"><h3 style="margin:0 0 12px;">Trade Offer from ' + escHtml(off.name) + '</h3><div style="display:flex;gap:20px;margin:16px 0;">';
-  h += '<div style="flex:1;"><h4 style="margin:0 0 6px;">They offer:</h4>';
-  if (offer.offerCash > 0) h += '<p>$' + offer.offerCash + '</p>';
-  offer.offerProps.forEach(function (pos) { h += '<p>' + BOARD_DATA[pos].name + '</p>'; });
-  if (!offer.offerCash && !offer.offerProps.length) h += '<p style="color:#888;">Nothing</p>';
-  h += '</div><div style="flex:1;"><h4 style="margin:0 0 6px;">They want:</h4>';
-  if (offer.receiverCash > 0) h += '<p>$' + offer.receiverCash + '</p>';
-  offer.receiverProps.forEach(function (pos) { h += '<p>' + BOARD_DATA[pos].name + '</p>'; });
-  if (!offer.receiverCash && !offer.receiverProps.length) h += '<p style="color:#888;">Nothing</p>';
-  h += '</div></div><div style="display:flex;gap:10px;justify-content:center;margin-top:12px;">' +
-    '<button class="btn btn-success" id="trade-accept">Accept</button>' +
-    '<button class="btn btn-danger" id="trade-reject">Reject</button></div></div>';
-
-  this.showCustomModal(h);
-  document.getElementById('trade-accept').addEventListener('click', function () {
-    self.closeCustomModal();
-    self.engine.executeTrade(offer.offererSeat, offer.receiverSeat, offer.offerCash, offer.receiverCash, offer.offerProps, offer.receiverProps);
-    self.addLog('Trade completed: ' + off.name + ' \u2194 ' + me.name); sfx('money');
-    self.syncState(); self.broadcastAction('trade-accepted', { offererSeat: offer.offererSeat, receiverSeat: offer.receiverSeat }); self.renderGame();
+  this.broadcastAction('trade-offer', {
+    offerer: this.mySeat,
+    receiver: partnerSeat,
+    offererCash: offerCash,
+    receiverCash: wantCash,
+    offererProps: offerProps,
+    receiverProps: wantProps,
+    offererName: cp.name
   });
-  document.getElementById('trade-reject').addEventListener('click', function () {
-    self.closeCustomModal();
-    self.broadcastAction('trade-rejected', { offererSeat: offer.offererSeat, receiverSeat: offer.receiverSeat });
-  });
+  this.addLog(cp.name + ' sent a trade offer');
+  showToast('Trade offer sent!', 'info');
 };
 
-/* ======== bankruptcy ======== */
+MonopolyClient.prototype.showIncomingTrade = function(offer) {
+  var self = this;
+  var offerer = this.engine.getPlayer(offer.offerer);
+  var html = '<div class="modal-header"><h3>Trade Offer from ' + escHtml(offerer ? offerer.name : 'Unknown') + '</h3></div>';
+  html += '<div class="modal-body" style="padding:16px;">';
 
-MonopolyClient.prototype.checkBankrupt = function (player) {
-  if (!player || player.money >= 0 || player.seatIndex !== this.mySeat) return;
-  this.showBankruptModal(player, this.engine.totalAssets(player.seatIndex) < 0);
+  html += '<div style="display:flex;gap:20px;">';
+  html += '<div style="flex:1;"><h4 style="font-size:13px;color:#2ecc71;">They Offer:</h4>';
+  if (offer.offererCash > 0) html += '<p style="font-size:13px;">💰 $' + offer.offererCash + '</p>';
+  for (var i = 0; i < offer.offererProps.length; i++) {
+    html += '<p style="font-size:12px;">🏠 ' + BOARD_DATA[offer.offererProps[i]].name + '</p>';
+  }
+  if (offer.offererCash === 0 && offer.offererProps.length === 0) html += '<p style="color:#aaa;font-size:12px;">Nothing</p>';
+  html += '</div>';
+
+  html += '<div style="flex:1;"><h4 style="font-size:13px;color:#e74c3c;">They Want:</h4>';
+  if (offer.receiverCash > 0) html += '<p style="font-size:13px;">💰 $' + offer.receiverCash + '</p>';
+  for (var j = 0; j < offer.receiverProps.length; j++) {
+    html += '<p style="font-size:12px;">🏠 ' + BOARD_DATA[offer.receiverProps[j]].name + '</p>';
+  }
+  if (offer.receiverCash === 0 && offer.receiverProps.length === 0) html += '<p style="color:#aaa;font-size:12px;">Nothing</p>';
+  html += '</div></div>';
+
+  html += '</div>';
+  html += '<div class="modal-footer" style="display:flex;gap:8px;justify-content:center;padding:12px;">';
+  html += '<button id="trade-accept-btn" class="btn btn-success">✅ Accept</button>';
+  html += '<button id="trade-reject-btn" class="btn btn-danger">❌ Reject</button>';
+  html += '</div>';
+
+  this.showCustomModal(html);
+
+  setTimeout(function() {
+    var acceptBtn = document.getElementById('trade-accept-btn');
+    var rejectBtn = document.getElementById('trade-reject-btn');
+    if (acceptBtn) acceptBtn.addEventListener('click', function() {
+      self.closeCustomModal();
+      self.engine.executeTrade(offer.offerer, offer.receiver, offer.offererCash, offer.receiverCash, offer.offererProps, offer.receiverProps);
+      self.broadcastAction('trade-accepted', offer);
+      self.syncState();
+      self.renderGame();
+      self.addLog('Trade accepted!');
+      sfx('buy');
+    });
+    if (rejectBtn) rejectBtn.addEventListener('click', function() {
+      self.closeCustomModal();
+      self.broadcastAction('trade-rejected', { offerer: offer.offerer, receiver: offer.receiver });
+      self.addLog('Trade rejected');
+    });
+  }, 50);
 };
 
-MonopolyClient.prototype.showBankruptModal = function (player, forced) {
-  var me = $('#bankrupt-message'); if (me) me.textContent = forced
-    ? player.name + ' is bankrupt! Not enough assets to cover debts.'
-    : player.name + ' is in debt ($' + Math.abs(player.money) + '). Sell houses or mortgage properties.';
-  var ow = $('#bankrupt-owed'); if (ow) ow.textContent = '$' + Math.abs(player.money);
-  var ca = $('#bankrupt-cash'); if (ca) ca.textContent = '$' + this.engine.totalAssets(player.seatIndex);
-  var mg = $('#bankrupt-manage'); if (mg) mg.style.display = forced ? 'none' : '';
+/* ── BANKRUPT MODAL ── */
+MonopolyClient.prototype.showBankruptModal = function(creditorSeat) {
+  var cp = this.engine.currentPlayer();
+  if (!cp) return;
+  this._bankruptCreditor = creditorSeat;
+
+  $('#bankrupt-owed').textContent = '$' + Math.abs(cp.money);
+  $('#bankrupt-cash').textContent = '$' + cp.money;
+
   this.openModal('modal-bankrupt');
 };
 
-MonopolyClient.prototype.confirmBankruptcy = function () {
+MonopolyClient.prototype.confirmBankruptcy = function(creditorSeat) {
+  sfx('bankrupt');
+  var cp = this.engine.currentPlayer();
+  this.engine.declareBankruptcy(this.mySeat, creditorSeat);
+  this.addLog(cp.name + ' went bankrupt!');
+  this.broadcastAction('went-bankrupt', { seat: this.mySeat, creditor: creditorSeat });
+  this.syncState();
   this.closeModal('modal-bankrupt');
-  var p = this.engine.currentPlayer(); if (!p) return;
-  var cr = this._pendingRent ? this._pendingRent.ownerSeat : null;
-  this.engine.declareBankruptcy(this.mySeat, cr);
-  this.addLog(p.name + ' went bankrupt!');
-  this.broadcastAction('went-bankrupt', { playerName: p.name, seatIndex: this.mySeat }); sfx('bankrupt');
-  this._pendingRent = null; this.syncState(); this.renderGame(); this.checkGameOver();
-  if (!this.engine.checkWinner()) this.endTurn();
-};
-
-MonopolyClient.prototype.checkGameOver = function () {
-  var w = this.engine.checkWinner(); if (w) this.showGameOverModal(w);
-};
-
-MonopolyClient.prototype.showGameOverModal = function (winner) {
-  var we = $('#gameover-winner'); if (we) we.textContent = '\uD83C\uDF89 ' + winner.name + ' wins!';
-  var se = $('#gameover-stats');
-  if (se) {
-    var h = '';
-    this.engine.players.forEach(function (p) {
-      var val = p.bankrupt ? 'BANKRUPT' : '$' + (p.money + p.properties.reduce(function (s, pos) { return s + ((BOARD_DATA[pos] || {}).price || 0); }, 0));
-      h += '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:' + PLAYER_COLORS[p.seatIndex] + '">' + escHtml(p.name) + '</span><span>' + val + '</span></div>';
-    });
-    se.innerHTML = h;
-  }
-  sfx('win'); this.openModal('modal-gameover');
-};
-
-/* ======== end turn ======== */
-
-MonopolyClient.prototype.endTurn = function () {
-  if (this.engine.currentTurn !== this.mySeat) return;
-  var p = this.engine.currentPlayer();
-  // doubles -> roll again
-  if (this.engine.lastDice.doubles && p && !p.inJail && !p.bankrupt && this.engine.doublesCount > 0 && this.engine.doublesCount < 3) {
-    this.engine.gamePhase = 'rolling'; this.syncState(); this.renderGame(); this.updateButtons();
-    this.addLog(p.name + ' rolled doubles \u2013 roll again!'); return;
-  }
-  this.engine.nextTurn(); this.syncState();
-  this.socket.emit('game-action', { action: 'end-turn' });
   this.renderGame();
-  var cp = this.engine.currentPlayer(); if (cp) this.addLog(cp.name + "'s turn");
+
+  var winner = this.engine.checkWinner();
+  if (winner) {
+    this.showGameOverModal(winner);
+  } else {
+    this.endTurn();
+  }
 };
 
-/* ======== rendering ======== */
-
-MonopolyClient.prototype.renderGame = function () {
-  this.renderTokensOnBoard(); this.renderPlayerCards(); this.renderPropertyOwnership(); this.renderTurnBanner(); this.updateButtons();
-};
-
-MonopolyClient.prototype.renderTokensOnBoard = function () {
-  $$('.player-token').forEach(function (t) { t.remove(); });
-  this.engine.players.forEach(function (p) {
-    if (p.bankrupt) return;
-    var area = $('[data-pos="' + p.position + '"] .token-area');
-    if (area) area.appendChild(makeToken(p.seatIndex));
-  });
-};
-
-MonopolyClient.prototype.renderPlayerCards = function () {
-  var container = $('#player-cards'); if (!container) return; container.innerHTML = '';
-  var self = this;
-  this.engine.players.forEach(function (p) {
-    var card = document.createElement('div');
-    card.className = 'player-card' + (p.bankrupt ? ' bankrupt' : '') + (p.seatIndex === self.engine.currentTurn ? ' active-turn' : '');
-    card.style.borderLeft = '4px solid ' + PLAYER_COLORS[p.seatIndex];
-
-    // group properties
-    var groups = {};
-    p.properties.forEach(function (pos) {
-      var sp = BOARD_DATA[pos]; var g = sp.group || sp.type;
-      if (!groups[g]) groups[g] = [];
-      groups[g].push({ space: sp, state: self.engine.propertyState[pos] });
-    });
-    var ph = '';
-    Object.keys(groups).forEach(function (g) {
-      ph += '<div style="display:flex;gap:2px;flex-wrap:wrap;margin-top:2px;">';
-      groups[g].forEach(function (item) {
-        var bg = item.space.group ? 'var(--prop-' + item.space.group + ')' : item.space.type === 'railroad' ? '#333' : '#888';
-        var op = item.state && item.state.mortgaged ? 'opacity:.4;' : '';
-        var h = item.state ? item.state.houses || 0 : 0;
-        var hi = h === 5 ? '<span style="color:red;font-size:8px;">H</span>' : h > 0 ? '<span style="font-size:8px;">' + '\u25CF'.repeat(h) + '</span>' : '';
-        ph += '<div title="' + escHtml(item.space.name) + '" style="background:' + bg + ';color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;' + op + 'line-height:1.2;">' + hi + '</div>';
-      });
-      ph += '</div>';
-    });
-
-    card.innerHTML =
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
-        '<div style="width:24px;height:24px;border-radius:50%;background:' + PLAYER_COLORS[p.seatIndex] + ';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;">' + (p.seatIndex + 1) + '</div>' +
-        '<div><div style="font-weight:bold;font-size:13px;">' + escHtml(p.name) + (p.seatIndex === self.mySeat ? ' (You)' : '') + '</div>' +
-        '<div style="font-size:12px;color:' + (p.money < 0 ? '#e74c3c' : '#27ae60') + ';">$' + p.money + '</div></div>' +
-        (!p.connected ? '<span style="font-size:10px;color:#e74c3c;">\u26AB DC</span>' : '') +
-        (p.inJail ? '<span style="font-size:10px;">\uD83D\uDD12 Jail</span>' : '') +
-        (p.getOutOfJailCards > 0 ? '<span style="font-size:10px;">\uD83C\uDCCF\u00d7' + p.getOutOfJailCards + '</span>' : '') +
-      '</div>' +
-      '<div class="player-properties">' + ph + '</div>' +
-      (p.bankrupt ? '<div style="color:#e74c3c;font-weight:bold;font-size:11px;">BANKRUPT</div>' : '');
-    container.appendChild(card);
-  });
-};
-
-MonopolyClient.prototype.renderPropertyOwnership = function () {
-  $$('.space-owner-dot').forEach(function (d) { d.remove(); });
-  $$('.space-houses').forEach(function (d) { d.remove(); });
-  var self = this;
-  Object.keys(this.engine.propertyState).forEach(function (pos) {
-    var ps = self.engine.propertyState[pos];
-    var el = $('[data-pos="' + pos + '"]'); if (!el) return;
-    el.style.position = 'relative';
-
-    if (ps.owner != null) {
-      var dot = document.createElement('div'); dot.className = 'space-owner-dot';
-      Object.assign(dot.style, { position:'absolute',bottom:'2px',right:'2px',width:'8px',height:'8px',borderRadius:'50%',background:PLAYER_COLORS[ps.owner],border:'1px solid #fff',zIndex:'5' });
-      el.appendChild(dot);
+MonopolyClient.prototype.checkBankrupt = function(player, creditorSeat) {
+  if (!player) return;
+  if (player.money < 0) {
+    if (this.engine.isBankrupt(player.seatIndex)) {
+      // Can't recover, auto-declare
+      this.showBankruptModal(creditorSeat);
+    } else {
+      // Can sell assets
+      this.showBankruptModal(creditorSeat);
     }
+  }
+};
+
+/* ── GAME OVER MODAL ── */
+MonopolyClient.prototype.showGameOverModal = function(winner) {
+  sfx('win');
+  var ch = getCharacter(winner.characterId);
+  $('#gameover-winner-token').textContent = ch ? ch.emoji : ('P' + (winner.seatIndex + 1));
+  $('#gameover-winner-token').style.background = winner.color || PLAYER_COLORS[winner.seatIndex];
+  $('#gameover-winner-name').textContent = winner.name;
+
+  var stats = $('#gameover-stats');
+  var html = '';
+  var allP = this.engine.players;
+  for (var i = 0; i < allP.length; i++) {
+    var p = allP[i];
+    html += '<div style="display:flex;justify-content:space-between;padding:6px 10px;border-left:3px solid ' + (p.color || PLAYER_COLORS[p.seatIndex]) + ';margin:3px 0;background:rgba(255,255,255,0.05);border-radius:4px;">';
+    html += '<span style="font-size:13px;">' + escHtml(p.name) + '</span>';
+    html += '<span style="font-size:13px;color:' + (p.bankrupt ? '#e74c3c' : '#2ecc71') + ';">' + (p.bankrupt ? 'BANKRUPT' : ('$' + p.money)) + '</span>';
+    html += '</div>';
+  }
+  stats.innerHTML = html;
+
+  this.openModal('modal-gameover');
+};
+
+/* ────────── TURN MANAGEMENT (SERVER AUTHORITATIVE) ────────── */
+MonopolyClient.prototype.endTurn = function() {
+  // BUG FIX #1: Doubles = roll again, don't end turn
+  if (this.engine.lastDice.doubles && !this.engine.currentPlayer().inJail && this.engine.doublesCount < 3 && this.engine.doublesCount > 0) {
+    this.engine.gamePhase = 'rolling';
+    this.addLog('Doubles! Roll again.');
+    this.renderGame();
+    return;
+  }
+  // Otherwise tell server to advance turn — do NOT call engine.nextTurn()
+  this.socket.emit('game-action', { action: 'end-turn', payload: { seat: this.mySeat } });
+  this.engine.gamePhase = 'waiting';
+  this.renderGame();
+};
+
+/* ────────── GAME ACTION HANDLER ────────── */
+MonopolyClient.prototype._handleGameAction = function(data) {
+  if (!data || !data.action) return;
+  var payload = data.payload || {};
+  var self = this;
+
+  switch (data.action) {
+    case 'select-character':
+      this._characterSelections[String(payload.seatIndex)] = payload.characterId;
+      this._renderCharacterGrid();
+      break;
+
+    case 'confirm-character':
+      this._characterConfirmed[String(payload.seatIndex)] = true;
+      this._characterSelections[String(payload.seatIndex)] = payload.characterId;
+      this._renderCharacterGrid();
+      this._checkAllConfirmed();
+      break;
+
+    case 'all-characters-confirmed':
+      if (payload.selections) {
+        for (var sk in payload.selections) {
+          if (payload.selections.hasOwnProperty(sk)) {
+            this._characterSelections[sk] = payload.selections[sk];
+          }
+        }
+      }
+      this._startActualGame();
+      break;
+
+    case 'end-turn':
+      // Server will emit turn-changed, ignore here
+      break;
+
+    case 'update-state':
+      if (payload) {
+        this.engine.initFromState(payload);
+        this.renderGame();
+      }
+      break;
+
+    case 'property-bought':
+      if (payload.seat !== this.mySeat) {
+        this.engine.buyProperty(payload.seat, payload.pos);
+        var sp = BOARD_DATA[payload.pos];
+        var buyer = this.engine.getPlayer(payload.seat);
+        this.addLog((buyer ? buyer.name : 'Someone') + ' bought ' + sp.name);
+        this.renderGame();
+      }
+      break;
+
+    case 'rent-paid':
+      if (payload.seat !== this.mySeat) {
+        var payer = this.engine.getPlayer(payload.seat);
+        var cred = this.engine.getPlayer(payload.creditor);
+        if (payer) payer.money -= payload.amount;
+        if (cred) cred.money += payload.amount;
+        this.addLog((payer ? payer.name : 'Someone') + ' paid $' + payload.amount + ' rent');
+        this.renderGame();
+      }
+      break;
+
+    case 'went-bankrupt':
+      if (payload.seat !== this.mySeat) {
+        this.engine.declareBankruptcy(payload.seat, payload.creditor);
+        var bp = this.engine.getPlayer(payload.seat);
+        this.addLog((bp ? bp.name : 'Someone') + ' went bankrupt!');
+        sfx('bankrupt');
+        this.renderGame();
+        var winner = this.engine.checkWinner();
+        if (winner) this.showGameOverModal(winner);
+      }
+      break;
+
+    case 'built-house':
+      if (payload.seat !== this.mySeat) {
+        this.engine.buildHouse(payload.seat, payload.pos);
+        sfx('build');
+        this.addLog(this.engine.getPlayer(payload.seat).name + ' built on ' + BOARD_DATA[payload.pos].name);
+        this.renderGame();
+      }
+      break;
+
+    case 'sold-house':
+      if (payload.seat !== this.mySeat) {
+        this.engine.sellHouse(payload.seat, payload.pos);
+        this.renderGame();
+      }
+      break;
+
+    case 'drew-card':
+      if (payload.seat !== this.mySeat) {
+        var cardPlayer = this.engine.getPlayer(payload.seat);
+        this.addLog((cardPlayer ? cardPlayer.name : 'Someone') + ' drew a ' + (payload.cardType || 'card'));
+        this.renderGame();
+      }
+      break;
+
+    case 'jail-action':
+      if (payload.seat !== this.mySeat) {
+        var jp = this.engine.getPlayer(payload.seat);
+        if (payload.type === 'pay-fine') {
+          this.engine.payJailFine(payload.seat);
+          this.addLog((jp ? jp.name : 'Someone') + ' paid jail fine');
+        } else if (payload.type === 'use-card') {
+          this.engine.useJailCard(payload.seat);
+          this.addLog((jp ? jp.name : 'Someone') + ' used jail card');
+        }
+        this.renderGame();
+      }
+      break;
+
+    case 'free-parking':
+      if (payload.seat !== this.mySeat) {
+        this.engine.collectFreeParking(payload.seat);
+        this.renderGame();
+      }
+      break;
+
+    case 'mortgage-action':
+      if (payload.seat !== this.mySeat) {
+        if (payload.type === 'mortgage') {
+          this.engine.mortgageProperty(payload.seat, payload.pos);
+        } else {
+          this.engine.unmortgageProperty(payload.seat, payload.pos);
+        }
+        this.renderGame();
+      }
+      break;
+
+    case 'trade-offer':
+      if (payload.receiver === this.mySeat) {
+        this.showIncomingTrade(payload);
+      }
+      break;
+
+    case 'trade-accepted':
+      if (payload.offerer === this.mySeat) {
+        this.engine.executeTrade(payload.offerer, payload.receiver, payload.offererCash, payload.receiverCash, payload.offererProps, payload.receiverProps);
+        sfx('buy');
+        this.addLog('Trade accepted!');
+        this.syncState();
+        this.renderGame();
+      }
+      break;
+
+    case 'trade-rejected':
+      if (payload.offerer === this.mySeat) {
+        showToast('Trade was rejected', 'error');
+        this.addLog('Trade rejected');
+      }
+      break;
+  }
+};
+
+/* ────────── GAME BUTTON BINDINGS ────────── */
+MonopolyClient.prototype._bindGameButtons = function() {
+  var self = this;
+  if (this._gameBound) return;
+  this._gameBound = true;
+
+  $('#btn-roll-dice').addEventListener('click', function() { self.rollDice(); });
+  $('#btn-end-turn').addEventListener('click', function() { self.endTurn(); });
+  $('#btn-build').addEventListener('click', function() { self.showBuildModal(); });
+  $('#btn-mortgage').addEventListener('click', function() { self.showMortgageModal(); });
+  $('#btn-trade').addEventListener('click', function() { self.showTradeModal(); });
+
+  // Buy modal buttons
+  $('#btn-modal-buy').addEventListener('click', function() { self.confirmBuy(); });
+  $('#btn-modal-pass').addEventListener('click', function() { self.passBuy(); });
+  $('#btn-modal-auction').addEventListener('click', function() { self.passBuy(); }); // Auction = pass for now
+
+  // Rent modal
+  $('#btn-pay-rent').addEventListener('click', function() { self.payRent(); });
+
+  // Card modal
+  $('#btn-card-ok').addEventListener('click', function() { self.cardOk(); });
+
+  // Build modal
+  $('#btn-build-cancel').addEventListener('click', function() { self.closeModal('modal-build'); });
+  $('#btn-build-confirm').addEventListener('click', function() { self.closeModal('modal-build'); });
+
+  // Mortgage modal
+  $('#btn-mortgage-close').addEventListener('click', function() { self.closeModal('modal-mortgage'); });
+
+  // Trade modal
+  $('#btn-trade-send').addEventListener('click', function() { self.sendTradeOffer(); });
+  $('#btn-trade-cancel').addEventListener('click', function() { self.closeModal('modal-trade'); });
+
+  // Bankrupt modal
+  $('#btn-bankrupt-manage').addEventListener('click', function() {
+    self.closeModal('modal-bankrupt');
+    self.showMortgageModal();
+  });
+  $('#btn-bankrupt-declare').addEventListener('click', function() {
+    self.confirmBankruptcy(self._bankruptCreditor);
+  });
+
+  // Game over
+  $('#btn-new-game').addEventListener('click', function() {
+    clearSession('monopoly-session');
+    window.location.reload();
+  });
+
+  // Game chat
+  $('#btn-send-game-chat').addEventListener('click', function() { self.sendChat('input-game-chat'); });
+  $('#input-game-chat').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); self.sendChat('input-game-chat'); }
+  });
+
+  // Sound toggle
+  $('#btn-sound-toggle').addEventListener('click', function() {
+    var on = SFX.toggle();
+    this.textContent = on ? '🔊' : '🔇';
+  });
+};
+
+/* ────────── RENDERING ────────── */
+MonopolyClient.prototype.renderGame = function() {
+  if (!this._gameStarted) return;
+  this.renderTokensOnBoard();
+  this.renderPlayerCards();
+  this.renderPropertyOwnership();
+  this.renderTurnBanner();
+  this.updateButtons();
+};
+
+MonopolyClient.prototype.renderTokensOnBoard = function() {
+  // Clear all tokens
+  var areas = $$('.token-area');
+  for (var i = 0; i < areas.length; i++) areas[i].innerHTML = '';
+
+  // Place tokens
+  var players = this.engine.players;
+  for (var j = 0; j < players.length; j++) {
+    var p = players[j];
+    if (p.bankrupt) continue;
+    var spaceEl = document.getElementById('space-' + p.position);
+    if (!spaceEl) continue;
+    var area = spaceEl.querySelector('.token-area');
+    if (!area) continue;
+    var tok = makeToken(p.seatIndex, p.characterId);
+    area.appendChild(tok);
+  }
+};
+
+MonopolyClient.prototype.renderPlayerCards = function() {
+  var container = $('#player-cards');
+  if (!container) return;
+  var html = '';
+  var players = this.engine.players;
+
+  for (var i = 0; i < players.length; i++) {
+    var p = players[i];
+    var color = p.color || PLAYER_COLORS[p.seatIndex];
+    var ch = getCharacter(p.characterId);
+    var isCurrentTurn = (p.seatIndex === this.engine.currentTurn);
+    var isMe = (p.seatIndex === this.mySeat);
+
+    var cls = 'player-card';
+    if (isCurrentTurn) cls += ' active-turn';
+    if (p.bankrupt) cls += ' bankrupt';
+
+    html += '<div class="' + cls + '" style="border-left:4px solid ' + color + ';padding:8px 10px;margin:4px 0;background:rgba(255,255,255,' + (isCurrentTurn ? '0.1' : '0.03') + ');border-radius:6px;' + (p.bankrupt ? 'opacity:0.5;' : '') + '">';
+
+    // Name row
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;">';
+    html += '<div style="display:flex;align-items:center;gap:6px;">';
+    if (ch) html += '<span style="font-size:18px;">' + ch.emoji + '</span>';
+    html += '<span style="font-size:14px;font-weight:700;color:' + color + ';">' + escHtml(p.name) + '</span>';
+    if (isMe) html += '<span style="font-size:10px;color:#f39c12;font-weight:600;"> (YOU)</span>';
+    html += '</div>';
+
+    // Badges
+    html += '<div style="display:flex;gap:4px;align-items:center;">';
+    if (!p.connected) html += '<span style="background:#e74c3c;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">DC</span>';
+    if (p.inJail) html += '<span style="background:#e67e22;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">JAIL</span>';
+    if (p.getOutOfJailCards > 0) html += '<span style="background:#27ae60;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">🃏x' + p.getOutOfJailCards + '</span>';
+    if (p.bankrupt) html += '<span style="background:#c0392b;color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;">BANKRUPT</span>';
+    html += '</div></div>';
+
+    // Money
+    var moneyColor = p.money >= 0 ? '#2ecc71' : '#e74c3c';
+    html += '<div style="font-size:13px;font-weight:600;color:' + moneyColor + ';margin:4px 0;">$' + p.money + '</div>';
+
+    // Property chips
+    if (p.properties.length > 0) {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">';
+      for (var k = 0; k < p.properties.length; k++) {
+        var propPos = p.properties[k];
+        var propSpace = BOARD_DATA[propPos];
+        var propState = this.engine.propertyState[propPos];
+        var dotColor = (propSpace.group && GROUP_COLORS[propSpace.group]) ? GROUP_COLORS[propSpace.group] : '#888';
+        var mortStyle = (propState && propState.mortgaged) ? 'opacity:0.3;' : '';
+        var houses = propState ? (propState.houses || 0) : 0;
+        var houseStr = '';
+        if (houses === 5) houseStr = '🏨';
+        else if (houses > 0) houseStr = houses + '';
+        html += '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:' + dotColor + ';font-size:8px;color:#fff;' + mortStyle + '" title="' + escHtml(propSpace.name) + (houses > 0 ? ' (' + houses + 'h)' : '') + '">' + houseStr + '</span>';
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+};
+
+MonopolyClient.prototype.renderPropertyOwnership = function() {
+  // Add owner indicators and house markers on board spaces
+  for (var pos = 0; pos < 40; pos++) {
+    var spaceEl = document.getElementById('space-' + pos);
+    if (!spaceEl) continue;
+
+    // Remove old indicators
+    var oldOwner = spaceEl.querySelector('.owner-indicator');
+    if (oldOwner) oldOwner.remove();
+    var oldHouses = spaceEl.querySelector('.house-indicator');
+    if (oldHouses) oldHouses.remove();
+
+    var ps = this.engine.propertyState[pos];
+    if (!ps) continue;
+
+    if (ps.owner !== null && ps.owner !== undefined) {
+      var color = PLAYER_COLORS[ps.owner] || '#888';
+      var ownerDot = document.createElement('div');
+      ownerDot.className = 'owner-indicator';
+      ownerDot.style.cssText = 'position:absolute;bottom:2px;right:2px;width:8px;height:8px;border-radius:50%;background:' + color + ';border:1px solid rgba(255,255,255,0.5);z-index:4;';
+      if (ps.mortgaged) ownerDot.style.opacity = '0.3';
+      spaceEl.style.position = 'relative';
+      spaceEl.appendChild(ownerDot);
+    }
+
     if (ps.houses > 0) {
-      var hd = document.createElement('div'); hd.className = 'space-houses';
-      Object.assign(hd.style, { position:'absolute',top:'1px',left:'50%',transform:'translateX(-50%)',display:'flex',gap:'1px',zIndex:'5' });
-      if (ps.houses === 5) hd.innerHTML = '<div style="width:12px;height:8px;background:#e74c3c;border-radius:2px;border:1px solid #a00;"></div>';
-      else { var hh = ''; for (var i = 0; i < ps.houses; i++) hh += '<div style="width:6px;height:6px;background:#2ecc71;border-radius:1px;border:1px solid #196;"></div>'; hd.innerHTML = hh; }
-      el.appendChild(hd);
+      var hDiv = document.createElement('div');
+      hDiv.className = 'house-indicator';
+      hDiv.style.cssText = 'position:absolute;top:2px;right:2px;font-size:10px;z-index:4;';
+      if (ps.houses === 5) {
+        hDiv.textContent = '🏨';
+      } else {
+        var hStr = '';
+        for (var h = 0; h < ps.houses; h++) hStr += '🏠';
+        hDiv.textContent = hStr;
+      }
+      spaceEl.appendChild(hDiv);
     }
-    if (ps.mortgaged) el.classList.add('mortgaged'); else el.classList.remove('mortgaged');
+  }
+};
+
+MonopolyClient.prototype.renderTurnBanner = function() {
+  var cp = this.engine.currentPlayer();
+  if (!cp) return;
+  var ch = getCharacter(cp.characterId);
+  var tokenEl = $('#turn-token');
+  var nameEl = $('#turn-player-name');
+  if (tokenEl) {
+    tokenEl.textContent = ch ? ch.emoji : (cp.seatIndex + 1);
+    tokenEl.style.background = cp.color || PLAYER_COLORS[cp.seatIndex];
+    tokenEl.style.color = '#fff';
+  }
+  if (nameEl) {
+    nameEl.textContent = cp.name + (cp.seatIndex === this.mySeat ? ' (You)' : '');
+    nameEl.style.color = cp.color || PLAYER_COLORS[cp.seatIndex];
+    nameEl.style.fontSize = '16px';
+    nameEl.style.fontWeight = '700';
+  }
+};
+
+MonopolyClient.prototype.updateButtons = function() {
+  var isMyTurn = this.engine.currentTurn === this.mySeat;
+  var phase = this.engine.gamePhase;
+  var cp = this.engine.currentPlayer();
+  var amBankrupt = cp && cp.bankrupt;
+
+  var rollBtn = $('#btn-roll-dice');
+  var endBtn = $('#btn-end-turn');
+  var buildBtn = $('#btn-build');
+  var mortgageBtn = $('#btn-mortgage');
+  var tradeBtn = $('#btn-trade');
+
+  if (amBankrupt || !isMyTurn) {
+    rollBtn.disabled = true;
+    endBtn.disabled = true;
+    endBtn.style.display = 'none';
+    buildBtn.disabled = true;
+    mortgageBtn.disabled = true;
+    tradeBtn.disabled = true;
+    return;
+  }
+
+  rollBtn.disabled = (phase !== 'rolling');
+  endBtn.style.display = (phase === 'action' || phase === 'landed') ? '' : 'none';
+  endBtn.disabled = (phase !== 'action');
+  buildBtn.disabled = false;
+  mortgageBtn.disabled = false;
+  tradeBtn.disabled = false;
+};
+
+/* ────────── STATE SYNC ────────── */
+MonopolyClient.prototype.syncState = function() {
+  // BUG FIX #5: Include ALL engine state
+  this.broadcastAction('update-state', this.engine.serialise());
+};
+
+MonopolyClient.prototype.broadcastAction = function(action, payload) {
+  if (!this.socket) return;
+  this.socket.emit('game-action', { action: action, payload: payload });
+};
+
+/* ────────── GAME LOG ────────── */
+MonopolyClient.prototype.addLog = function(msg) {
+  var log = $('#game-log');
+  if (!log) return;
+  var now = new Date();
+  var time = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+  var div = document.createElement('div');
+  div.style.cssText = 'font-size:12px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);';
+  div.innerHTML = '<span style="color:#666;font-size:10px;">[' + time + ']</span> ' + escHtml(msg);
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+};
+
+/* ────────── AUTO-RECONNECT ────────── */
+MonopolyClient.prototype._tryReconnect = function() {
+  var session = loadSession('monopoly-session');
+  if (!session || !session.roomCode) return;
+  var self = this;
+  this.roomCode = session.roomCode;
+  this.mySeat = session.mySeat;
+  this.myName = session.myName;
+  this.isHost = session.isHost;
+  this.reconnectToken = session.reconnectToken;
+
+  // Wait for socket to connect then attempt rejoin
+  this.socket.on('connect', function onReconn() {
+    self.socket.off('connect', onReconn);
+    self.socket.emit('join-room', {
+      playerName: self.myName,
+      roomCode: self.roomCode,
+      reconnectToken: self.reconnectToken
+    });
   });
 };
 
-MonopolyClient.prototype.renderTurnBanner = function () {
-  var cp = this.engine.currentPlayer(); if (!cp) return;
-  var te = $('#turn-token'); if (te) { te.innerHTML = ''; te.appendChild(makeToken(cp.seatIndex)); }
-  var ne = $('#turn-player-name');
-  if (ne) { ne.textContent = cp.seatIndex === this.mySeat ? 'Your Turn' : cp.name + "'s Turn"; ne.style.color = PLAYER_COLORS[cp.seatIndex]; }
-};
-
-MonopolyClient.prototype.updateButtons = function () {
-  var my = this.engine.currentTurn === this.mySeat;
-  var p  = this.engine.currentPlayer();
-  var ph = this.engine.gamePhase;
-  var self = this;
-
-  var rb = $('#btn-roll-dice'); if (rb) rb.disabled = !my || ph !== 'rolling' || this._animating;
-  var bb = $('#btn-buy');
-  if (bb) {
-    var can = my && ph === 'landed' && p && BOARD_DATA[p.position] && BOARD_DATA[p.position].price && !self.engine.propertyState[p.position];
-    bb.disabled = !can; bb.style.display = can ? '' : 'none';
-  }
-  var eb = $('#btn-end-turn'); if (eb) eb.disabled = !my || (ph !== 'action' && ph !== 'landed');
-  var bd = $('#btn-build');
-  if (bd) {
-    var hm = false;
-    if (my && p) hm = p.properties.some(function (pos) { var sp = BOARD_DATA[pos]; return sp.group && self.engine.ownsFullGroup(self.mySeat, sp.group); });
-    bd.disabled = !hm;
-  }
-  var mb = $('#btn-mortgage'); if (mb) { var mp = this.engine.getPlayer(this.mySeat); mb.disabled = !mp || mp.properties.length === 0; }
-  var tb = $('#btn-trade'); if (tb) tb.disabled = this.engine.activePlayers().length < 2;
-};
-
-/* ======== game log ======== */
-
-MonopolyClient.prototype.addLog = function (msg) {
-  var log = $('#game-log'); if (!log) return;
-  var e = document.createElement('div'); e.className = 'log-entry';
-  var d = new Date(); var t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-  e.innerHTML = '<span style="color:#888;font-size:11px;">' + t + '</span> ' + msg;
-  log.appendChild(e); log.scrollTop = log.scrollHeight;
-};
-
-/* ======== modal helpers ======== */
-
-MonopolyClient.prototype.openModal = function (id) {
-  var m = document.getElementById(id); if (m) { m.classList.add('active'); m.style.display = ''; }
-};
-MonopolyClient.prototype.closeModal = function (id) {
-  var m = document.getElementById(id); if (m) m.classList.remove('active');
-};
-
-/* ======== boot ======== */
-
-document.addEventListener('DOMContentLoaded', function () {
-  window.game = new MonopolyClient();
+/* ──────────────────────────────────────
+   7. BOOTSTRAP
+   ────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function() {
+  var client = new MonopolyClient();
+  client.init();
+  window.monopoly = client;
 });
