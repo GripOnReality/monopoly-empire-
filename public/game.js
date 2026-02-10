@@ -860,6 +860,10 @@ MonopolyClient.prototype.connectSocket = function() {
   this.socket.on('player-abandoned', function(data) { self._onPlayerAbandoned(data); });
 
   this.socket.on('game-started', function(data) {
+    // Extract player list and host info from server data
+    if (data && data.players) self.players = data.players;
+    if (data && data.hostId) self.isHost = (data.hostId === self.socket.id);
+    console.log('[game-started] players:', self.players.length, 'isHost:', self.isHost);
     self._enterCharacterSelect();
   });
 
@@ -1355,8 +1359,12 @@ MonopolyClient.prototype._checkAllConfirmed = function() {
       break;
     }
   }
+  console.log('[checkAllConfirmed] players:', this.players.length, 'confirmed:', JSON.stringify(this._characterConfirmed), 'allConfirmed:', allConfirmed, 'isHost:', this.isHost);
   if (allConfirmed && this.isHost) {
+    console.log('[checkAllConfirmed] All confirmed! Host starting game...');
     this.socket.emit('game-action', { action: 'all-characters-confirmed', payload: { selections: this._characterSelections } });
+    // Host must also start locally — server sends game-action to everyone EXCEPT sender
+    this._startActualGame();
   }
 };
 
