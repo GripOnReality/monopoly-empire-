@@ -807,6 +807,12 @@ function MonopolyClient() {
   this._characterConfirmed = {};
   this._myCharacter = null;
   this._gameStarted = false;
+
+  // Module references (initialized after socket connects)
+  this.gameSettings = null;
+  this.auctionManager = null;
+  this.timerManager = null;
+  this.botManager = null;
 }
 
 MonopolyClient.prototype.init = function() {
@@ -853,6 +859,14 @@ MonopolyClient.prototype.connectSocket = function() {
   });
 
   this.socket.on('dice-rolled', function(data) {
+    // If this is a bot's roll and we're host, handle it via bot manager
+    if (self.isHost && self.botManager && self.botManager.isBot(data.seatIndex)) {
+      // Animate dice for everyone, then bot manager processes
+      self.animateDice(data.die1, data.die2, function() {
+        self.botManager.handleDiceRolledForBot(data);
+      });
+      return;
+    }
     self._onDiceRolled(data);
   });
 
@@ -865,6 +879,16 @@ MonopolyClient.prototype.connectSocket = function() {
     self.renderGame();
     var cp = self.engine.currentPlayer();
     if (cp) self.addLog(cp.name + "'s turn");
+
+    // Reset turn timer for new turn
+    if (self.timerManager) {
+      self.timerManager.startForCurrentTurn();
+    }
+
+    // If it's a bot's turn and we're the host, let bot manager handle it
+    if (self.isHost && self.botManager && self.botManager.isBot(data.currentTurn)) {
+      setTimeout(function() { self.botManager.handleBotTurn(data.currentTurn); }, 1500);
+    }
   });
 
   this.socket.on('game-state-update', function(data) {
@@ -1084,6 +1108,19 @@ MonopolyClient.prototype._enterWaitingRoom = function() {
   this._renderPlayerList();
   this._renderWaitingStatus();
   this._bindWaitingRoom();
+
+  // Initialize Game Settings module
+  if (window.GameSettings && !this.gameSettings) {
+    this.gameSettings = new GameSettings(this.isHost, this.socket);
+    var settingsContainer = $('#settings-container');
+    if (settingsContainer) {
+      settingsContainer.innerHTML = this.gameSettings.renderSettingsPanel();
+      this.gameSettings.bindEvents(settingsContainer);
+    }
+  }
+
+  // Initialize Bot Controls (host only)
+  this._initBotControls();
 };
 
 MonopolyClient.prototype._bindWaitingRoom = function() {
@@ -1371,6 +1408,60 @@ MonopolyClient.prototype._startActualGame = function() {
       playerColor,
       charId
     );
+  }
+
+  // Apply game settings to engine before first render
+  if (this.gameSettings) {
+    this.gameSettings.applyToEngine(this.engine);
+  }
+
+  // Initialize Auction Manager
+  if (window.AuctionManager) {
+    var auctionSelf = this;
+    this.auctionManager = new AuctionManager(this.engine, this.socket, this.mySeat);
+    // Override the default syncState and addLog callbacks
+    this.auctionManager._clientSyncState = function() { auctionSelf.syncState(); };
+    this.auctionManager._clientAddLog = function(msg) { auctionSelf.addLog(msg); };
+    this.auctionManager._clientRenderGame = function() { auctionSelf.renderGame(); };
+    this.auctionManager._onAuctionEnd = function() {
+      // Resume timer after auction ends
+      if (auctionSelf.timerManager) auctionSelf.timerManager.resumeAfterAuction();
+      auctionSelf.engine.gamePhase = 'action';
+      auctionSelf.syncState();
+      auctionSelf.renderGame();
+    };
+  }
+
+  // Initialize Turn Timer
+  var timerDuration = this.gameSettings ? parseInt(this.gameSettings.get('turnTimer')) || 0 : 60;
+  if (window.TurnTimerManager && timerDuration > 0) {
+    this.timerManager = new TurnTimerManager({
+      client: this,
+      engine: this.engine,
+      socket: this.socket,
+      mySeat: this.mySeat,
+      duration: timerDuration
+    });
+    this.timerManager.attach();
+    // Render timer bar into slot
+    var timerSlot = $('#turn-timer-slot');
+    if (timerSlot && this.timerManager.timer) {
+      timerSlot.innerHTML = this.timerManager.timer.renderTimerBar();
+    }
+    this.timerManager.startForCurrentTurn();
+  }
+
+  // Initialize Bot Manager (host only)
+  if (this.isHost && window.BotManager) {
+    this.botManager = new BotManager(this.engine, this);
+    // Register any bots that were added in the waiting room
+    if (this._pendingBots) {
+      for (var bi = 0; bi < this._pendingBots.length; bi++) {
+        var pb = this._pendingBots[bi];
+        this.botManager.addBot(pb.seatIndex, pb.difficulty, pb.name);
+      }
+    }
+    this.botManager.startTicking();
   }
 
   this._bindGameButtons();
@@ -1750,8 +1841,19 @@ MonopolyClient.prototype.confirmBuy = function() {
 
 MonopolyClient.prototype.passBuy = function() {
   this.closeModal('modal-buy');
-  this.engine.gamePhase = 'action';
-  this.renderGame();
+
+  // Check if auctions are enabled
+  var auctionsOn = this.gameSettings ? this.gameSettings.get('auctionProperties') === 'on' : false;
+
+  if (auctionsOn && this.auctionManager && this._buyPos !== undefined) {
+    // Start auction for the declined property
+    this.auctionManager.startAuction(this._buyPos, this.mySeat);
+    // Timer pauses during auction
+    if (this.timerManager) this.timerManager.pauseForAuction();
+  } else {
+    this.engine.gamePhase = 'action';
+    this.renderGame();
+  }
 };
 
 /* ── RENT MODAL ── */
@@ -2256,6 +2358,21 @@ MonopolyClient.prototype._handleGameAction = function(data) {
   var payload = data.payload || {};
   var self = this;
 
+  // Delegate to settings module
+  if (this.gameSettings && this.gameSettings.handleAction(data)) return;
+
+  // Delegate to auction module
+  if (this.auctionManager && data.action.indexOf('auction-') === 0) {
+    this.auctionManager.handleAction(data);
+    return;
+  }
+
+  // Handle timer sync from other clients
+  if (data.action === 'timer-sync') {
+    // Other client's timer info — could update display
+    return;
+  }
+
   switch (data.action) {
     case 'select-character':
       this._characterSelections[String(payload.seatIndex)] = payload.characterId;
@@ -2384,6 +2501,10 @@ MonopolyClient.prototype._handleGameAction = function(data) {
       if (payload.receiver === this.mySeat) {
         this.showIncomingTrade(payload);
       }
+      // If the trade is directed at a bot and we're host, let bot handle it
+      if (this.isHost && this.botManager && this.botManager.isBot(payload.receiver)) {
+        this.botManager.handleIncomingTradeForBot(payload);
+      }
       break;
 
     case 'trade-accepted':
@@ -2420,7 +2541,7 @@ MonopolyClient.prototype._bindGameButtons = function() {
   // Buy modal buttons
   $('#btn-modal-buy').addEventListener('click', function() { self.confirmBuy(); });
   $('#btn-modal-pass').addEventListener('click', function() { self.passBuy(); });
-  $('#btn-modal-auction').addEventListener('click', function() { self.passBuy(); }); // Auction = pass for now
+  $('#btn-modal-auction').addEventListener('click', function() { self.passBuy(); }); // Triggers auction if enabled
 
   // Rent modal
   $('#btn-pay-rent').addEventListener('click', function() { self.payRent(); });
@@ -2834,6 +2955,99 @@ MonopolyClient.prototype._tryReconnect = function() {
       reconnectToken: self.reconnectToken
     });
   });
+};
+
+/* ────────── BOT CONTROLS (WAITING ROOM) ────────── */
+MonopolyClient.prototype._initBotControls = function() {
+  var self = this;
+  var controls = $('#bot-controls');
+  if (!controls) return;
+
+  // Only host sees bot controls
+  if (this.isHost) {
+    controls.style.display = '';
+  } else {
+    controls.style.display = 'none';
+    return;
+  }
+
+  this._pendingBots = this._pendingBots || [];
+
+  var addBtn = $('#btn-add-bot');
+  if (addBtn && !this._botControlsBound) {
+    this._botControlsBound = true;
+    addBtn.addEventListener('click', function() {
+      if (self.players.length + self._pendingBots.length >= 6) {
+        showToast('Room is full (max 6 players)', 'error');
+        return;
+      }
+      var difficulty = ($('#bot-difficulty') || {}).value || 'medium';
+      var botNames = ['Bot Alice', 'Bot Bob', 'Bot Carol', 'Bot Dave', 'Bot Eve'];
+      var usedNames = self._pendingBots.map(function(b) { return b.name; });
+      var botName = '';
+      for (var i = 0; i < botNames.length; i++) {
+        if (usedNames.indexOf(botNames[i]) === -1) { botName = botNames[i]; break; }
+      }
+      if (!botName) { showToast('Max 5 bots', 'error'); return; }
+
+      var seatIndex = self.players.length + self._pendingBots.length;
+      self._pendingBots.push({
+        seatIndex: seatIndex,
+        name: botName,
+        difficulty: difficulty,
+        isBot: true
+      });
+
+      // Add bot to players list for display
+      self.players.push({
+        id: 'bot-' + seatIndex,
+        name: botName,
+        connected: true,
+        seatIndex: seatIndex,
+        color: '#888',
+        isBot: true
+      });
+
+      sfx('player_join');
+      self._renderPlayerList();
+      self._renderWaitingStatus();
+      self._renderBotSlots();
+    });
+  }
+
+  this._renderBotSlots();
+};
+
+MonopolyClient.prototype._renderBotSlots = function() {
+  var slots = $('#bot-slots');
+  if (!slots || !this._pendingBots) return;
+  var html = '';
+  for (var i = 0; i < this._pendingBots.length; i++) {
+    var bot = this._pendingBots[i];
+    var diffColor = bot.difficulty === 'hard' ? '#e74c3c' : (bot.difficulty === 'medium' ? '#f39c12' : '#2ecc71');
+    html += '<div class="bot-slot-row" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;margin:4px 0;background:rgba(255,255,255,0.05);border-radius:6px;border-left:3px dashed ' + diffColor + ';">';
+    html += '<span style="font-size:13px;">🤖 ' + escHtml(bot.name) + ' <span style="color:' + diffColor + ';font-size:11px;text-transform:uppercase;">' + bot.difficulty + '</span></span>';
+    html += '<button class="btn btn-danger btn-small remove-bot-btn" data-idx="' + i + '" style="padding:2px 8px;font-size:11px;">✕</button>';
+    html += '</div>';
+  }
+  slots.innerHTML = html;
+
+  // Bind remove buttons
+  var self = this;
+  var removeBtns = slots.querySelectorAll('.remove-bot-btn');
+  for (var r = 0; r < removeBtns.length; r++) {
+    (function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(btn.getAttribute('data-idx'));
+        var removed = self._pendingBots.splice(idx, 1)[0];
+        // Remove from players list
+        self.players = self.players.filter(function(p) { return p.name !== removed.name; });
+        self._renderPlayerList();
+        self._renderWaitingStatus();
+        self._renderBotSlots();
+      });
+    })(removeBtns[r]);
+  }
 };
 
 /* ──────────────────────────────────────

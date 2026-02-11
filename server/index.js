@@ -156,6 +156,19 @@ function createRoom(hostId, hostName) {
     lastActivity:  Date.now(),
     chatHistory:   [],             // { playerName, playerId, message, timestamp }
     _disconnectTimers: new Map(),  // playerId -> setTimeout handle
+    // Game settings (synced from host client)
+    settings: {
+      startingMoney: 1500,
+      freeParkingRule: 'tax-collection',
+      auctionProperties: 'on',
+      turnTimer: 60,
+      startingPosition: 'go',
+      goSalary: 200,
+      maxTurns: 0,
+    },
+    // Server-side turn timer
+    _turnTimer: null,
+    _turnTimerDuration: 0,
   };
   rooms.set(roomCode, room);
   return room;
@@ -401,8 +414,11 @@ io.on('connection', (socket) => {
         }
         room.started = true;
         room.currentTurn = 0;
-        console.log(`[START] Room ${roomCode} — ${connected.length} players`);
+        room._turnTimerDuration = parseInt(room.settings.turnTimer) || 0;
+        console.log(`[START] Room ${roomCode} — ${connected.length} players (timer: ${room._turnTimerDuration}s)`);
         io.to(roomCode).emit('game-started', roomSnapshot(room));
+        // Start the server-side backup timer
+        startServerTurnTimer(room);
         break;
       }
 
@@ -422,6 +438,9 @@ io.on('connection', (socket) => {
 
       // ── End Turn ───────────────────────────────────────────────────────
       case 'end-turn': {
+        // Clear server-side turn timer
+        if (room._turnTimer) { clearTimeout(room._turnTimer); room._turnTimer = null; }
+
         const eligible = room.players
           .map((p, i) => (p.connected && !p.abandoned) ? i : -1)
           .filter(i => i !== -1);
@@ -433,6 +452,56 @@ io.on('connection', (socket) => {
           currentTurn: room.currentTurn,
           gameState:   roomSnapshot(room),
         });
+
+        // Start server-side backup timer for next turn
+        startServerTurnTimer(room);
+        break;
+      }
+
+      // ── Settings Sync (from host) ─────────────────────────────────────
+      case 'settings-update': {
+        if (socket.id === room.hostId && payload) {
+          if (payload.key && payload.value !== undefined) {
+            room.settings[payload.key] = payload.value;
+          }
+          // Update turn timer duration
+          if (payload.key === 'turnTimer') {
+            room._turnTimerDuration = parseInt(payload.value) || 0;
+          }
+        }
+        // Broadcast to others (default handler below will do this)
+        socket.to(roomCode).emit('game-action', { action, payload, playerId: socket.id, seatIndex: socket.data.seatIndex });
+        break;
+      }
+
+      case 'settings-sync': {
+        if (socket.id === room.hostId && payload && payload.settings) {
+          room.settings = { ...room.settings, ...payload.settings };
+          room._turnTimerDuration = parseInt(room.settings.turnTimer) || 0;
+        }
+        socket.to(roomCode).emit('game-action', { action, payload, playerId: socket.id, seatIndex: socket.data.seatIndex });
+        break;
+      }
+
+      // ── Force End Turn (server timer expired) ──────────────────────────
+      case 'force-end-turn': {
+        // Only server itself triggers this via the timer, but accept from host too
+        if (socket.id === room.hostId) {
+          if (room._turnTimer) { clearTimeout(room._turnTimer); room._turnTimer = null; }
+          const eligibleF = room.players
+            .map((p, i) => (p.connected && !p.abandoned) ? i : -1)
+            .filter(i => i !== -1);
+          if (eligibleF.length === 0) break;
+          const curIdxF = eligibleF.indexOf(room.currentTurn);
+          const nextIdxF = curIdxF === -1 ? 0 : (curIdxF + 1) % eligibleF.length;
+          room.currentTurn = eligibleF[nextIdxF];
+          io.to(roomCode).emit('turn-changed', {
+            currentTurn: room.currentTurn,
+            gameState: roomSnapshot(room),
+            forced: true,
+          });
+          startServerTurnTimer(room);
+        }
         break;
       }
 
@@ -581,6 +650,41 @@ io.on('connection', (socket) => {
     }
   }
 });
+
+// ─── Server-Side Turn Timer (Backup) ────────────────────────────────────────
+function startServerTurnTimer(room) {
+  if (room._turnTimer) { clearTimeout(room._turnTimer); room._turnTimer = null; }
+  const duration = room._turnTimerDuration;
+  if (!duration || duration <= 0) return; // Timer disabled
+
+  const gracePeriod = 5000; // 5 seconds grace beyond client timer
+  const totalMs = (duration * 1000) + gracePeriod;
+  const roomCode = room.roomCode;
+  const expectedSeat = room.currentTurn;
+
+  room._turnTimer = setTimeout(() => {
+    room._turnTimer = null;
+    const currentRoom = rooms.get(roomCode);
+    if (!currentRoom || !currentRoom.started) return;
+    // Only force if the turn hasn't changed (client didn't handle it)
+    if (currentRoom.currentTurn !== expectedSeat) return;
+
+    console.log(`[TIMER] Force-ending turn for seat ${expectedSeat} in room ${roomCode}`);
+    const eligible = currentRoom.players
+      .map((p, i) => (p.connected && !p.abandoned) ? i : -1)
+      .filter(i => i !== -1);
+    if (eligible.length === 0) return;
+    const curIdx = eligible.indexOf(currentRoom.currentTurn);
+    const nextIdx = curIdx === -1 ? 0 : (curIdx + 1) % eligible.length;
+    currentRoom.currentTurn = eligible[nextIdx];
+    io.to(roomCode).emit('turn-changed', {
+      currentTurn: currentRoom.currentTurn,
+      gameState: roomSnapshot(currentRoom),
+      forced: true,
+    });
+    startServerTurnTimer(currentRoom);
+  }, totalMs);
+}
 
 // ─── Periodic Stale-Room Cleanup ────────────────────────────────────────────
 setInterval(() => {

@@ -65,6 +65,22 @@
         </div>
         <div id="player-list"></div>
       </div>
+      <div id="settings-container"></div>
+      <!-- Bot Controls (host only) -->
+      <div id="bot-controls" class="player-list-card" style="display:none;">
+        <div class="player-list-header">
+          <h3>🤖 AI Bots</h3>
+        </div>
+        <div id="bot-slots"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <select id="bot-difficulty" class="settings-select" style="flex:1;">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button id="btn-add-bot" class="btn btn-secondary btn-small">+ Add Bot</button>
+        </div>
+      </div>
       <p id="waiting-status" class="waiting-status">Waiting for players...</p>
       <button id="btn-start-game" class="btn btn-primary btn-large" style="display:none;">Start Game</button>
       <p id="waiting-for-host" class="waiting-for-host" style="display:none;">Waiting for host to start...</p>
@@ -122,8 +138,11 @@
     <aside class="panel panel-left">
       <div class="turn-banner">
         <span id="turn-token" class="turn-token"></span>
-        <span id="turn-player-name" class="turn-player-name">—</span>
-        <div id="waiting-text" class="waiting-text"></div>
+        <div class="turn-info">
+          <span id="turn-player-name" class="turn-player-name">—</span>
+          <div id="waiting-text" class="waiting-text"></div>
+          <div id="turn-timer-slot"></div>
+        </div>
       </div>
       <div class="action-buttons">
         <button id="btn-roll-dice" class="btn btn-primary btn-action" disabled>🎲 Roll Dice</button>
@@ -738,6 +757,10 @@
   <!-- SCRIPTS -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="sounds.js"></script>
+  <script src="settings.js"></script>
+  <script src="turnTimer.js"></script>
+  <script src="auction.js"></script>
+  <script src="bot.js"></script>
   <script src="game.js"></script>
 
 </body>
