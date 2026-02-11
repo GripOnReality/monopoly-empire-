@@ -65,6 +65,60 @@ app.get('/rooms', (_req, res) => {
   res.json(list);
 });
 
+// ─── Store API (mock — serves static catalog) ────────────────────────────────
+app.get('/api/store', (_req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Store catalog served from client-side. This endpoint validates purchases in production.',
+  });
+});
+
+// ─── Profile API (mock — in production, persists to database) ────────────────
+app.use(express.json({ limit: '10kb' }));
+
+app.post('/api/profile/email', (req, res) => {
+  const email = (req.body?.email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ success: false, error: 'Invalid email address' });
+  }
+  // In production: save to DB, send verification email
+  console.log(`[PROFILE] Email registered: ${email}`);
+  res.json({ success: true, message: 'Email connected successfully', email });
+});
+
+app.get('/api/leaderboard', (_req, res) => {
+  // Mock leaderboard — in production, fetch from database
+  res.json({
+    weekly: [
+      { rank: 1, name: 'CryptoKing', wins: 342, score: 28500 },
+      { rank: 2, name: 'EmpressNova', wins: 298, score: 24200 },
+      { rank: 3, name: 'DarkRider', wins: 267, score: 21800 },
+    ],
+    message: 'Full leaderboard served from client-side mock data.'
+  });
+});
+
+// ─── Open Rooms (for Quick Play matchmaking) ─────────────────────────────────
+app.get('/api/quick-play', (_req, res) => {
+  const openRooms = [];
+  for (const [code, room] of rooms) {
+    if (!room.started && !room.isPrivate && room.players.length < 6 && room.players.length >= 1) {
+      openRooms.push({
+        code,
+        players: room.players.length,
+        host: room.players[0]?.name || '?',
+      });
+    }
+  }
+  // Return a random open room or null
+  if (openRooms.length > 0) {
+    const pick = openRooms[Math.floor(Math.random() * openRooms.length)];
+    res.json({ success: true, room: pick });
+  } else {
+    res.json({ success: false, message: 'No open rooms. Create a new one!' });
+  }
+});
+
 // ─── Room Storage ───────────────────────────────────────────────────────────
 const rooms = new Map(); // roomCode -> RoomState
 
@@ -133,7 +187,7 @@ function roomSnapshot(room) {
 
 // ─── Room Lifecycle ─────────────────────────────────────────────────────────
 
-function createRoom(hostId, hostName) {
+function createRoom(hostId, hostName, isPrivate, password) {
   const roomCode = generateRoomCode();
   const room = {
     roomCode,
@@ -166,6 +220,9 @@ function createRoom(hostId, hostName) {
       goSalary: 200,
       maxTurns: 0,
     },
+    // Private room
+    isPrivate: !!isPrivate,
+    password: password || null,
     // Server-side turn timer
     _turnTimer: null,
     _turnTimerDuration: 0,
@@ -258,7 +315,9 @@ io.on('connection', (socket) => {
     }
 
     const playerName = sanitiseName(data?.playerName) || 'Host';
-    const room = createRoom(socket.id, playerName);
+    const isPrivate = !!data?.isPrivate;
+    const password = data?.password ? String(data.password).slice(0, 20) : null;
+    const room = createRoom(socket.id, playerName, isPrivate, password);
 
     socket.join(room.roomCode);
     socket.data.roomCode = room.roomCode;
@@ -338,6 +397,16 @@ io.on('connection', (socket) => {
     }
 
     // ── Normal join (pre-game lobby) ─────────────────────────────────────
+    // Check private room password
+    if (room.isPrivate && room.password) {
+      const joinPassword = data?.password || '';
+      if (joinPassword !== room.password) {
+        return respond(socket, 'room-joined', {
+          success: false, error: 'Incorrect room password', needsPassword: true,
+        }, callback);
+      }
+    }
+
     if (room.players.length >= MAX_PLAYERS) {
       return respond(socket, 'room-joined', {
         success: false, error: `Room is full (max ${MAX_PLAYERS} players)`,

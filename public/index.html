@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MONOPOLY EMPIRE</title>
+  <title>RICHUP.io — Monopoly Empire</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♛</text></svg>">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,6 +11,52 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ANIMATED BACKGROUND SYMBOLS (Monopoly-themed)          -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="bg-symbols" class="bg-symbols" aria-hidden="true"></div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- TOP NAVIGATION BAR                                      -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <nav id="top-nav" class="top-nav">
+    <div class="nav-left">
+      <div class="nav-brand">
+        <span class="nav-crown">♛</span>
+        <span class="nav-title">RICHUP<span class="nav-dot">.io</span></span>
+      </div>
+    </div>
+    <div class="nav-center">
+      <button id="nav-home" class="nav-link active" data-tab="home">
+        <span class="nav-link-icon">🏠</span>
+        <span class="nav-link-text">Home</span>
+      </button>
+      <button id="nav-play" class="nav-link" data-tab="play">
+        <span class="nav-link-icon">🎮</span>
+        <span class="nav-link-text">Play</span>
+      </button>
+      <button id="nav-leaderboard" class="nav-link" data-tab="leaderboard">
+        <span class="nav-link-icon">🏆</span>
+        <span class="nav-link-text">Rankings</span>
+      </button>
+    </div>
+    <div class="nav-right">
+      <button id="nav-store-btn" class="nav-btn nav-btn-store" title="Store">
+        <span class="nav-btn-icon">🛒</span>
+        <span class="nav-btn-label">Store</span>
+        <span id="store-badge" class="nav-badge" style="display:none;">NEW</span>
+      </button>
+      <button id="nav-profile-btn" class="nav-btn nav-btn-profile" title="Profile">
+        <span class="nav-btn-icon">👤</span>
+        <span class="nav-btn-label">Profile</span>
+      </button>
+      <div id="nav-coin-display" class="nav-coin-display">
+        <span class="coin-icon">🪙</span>
+        <span id="coin-amount" class="coin-amount">500</span>
+      </div>
+    </div>
+  </nav>
 
   <!-- ═══════════════════════════════════════════════════════ -->
   <!-- SCREEN 1 : LANDING                                     -->
@@ -28,13 +74,54 @@
           <label for="input-name">Your Name</label>
           <input type="text" id="input-name" placeholder="Enter your name" maxlength="20" autocomplete="off">
         </div>
-        <button id="btn-create" class="btn btn-primary btn-large" disabled>Create Room</button>
+
+        <!-- Room Type Tabs -->
+        <div class="room-type-tabs">
+          <button class="room-tab active" data-room-type="public" id="tab-public">
+            <span class="room-tab-icon">🌐</span> Public Game
+          </button>
+          <button class="room-tab" data-room-type="private" id="tab-private">
+            <span class="room-tab-icon">🔒</span> Private Room
+          </button>
+        </div>
+
+        <!-- Private Room Password (hidden by default) -->
+        <div id="private-room-options" class="private-room-options" style="display:none;">
+          <div class="input-group">
+            <label for="input-room-password">Room Password</label>
+            <div class="password-input-wrapper">
+              <input type="password" id="input-room-password" placeholder="Set a password" maxlength="20" autocomplete="off">
+              <button id="toggle-password" class="btn-toggle-pw" type="button">👁</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-create" class="btn btn-primary btn-large" disabled>
+          <span class="btn-icon-left">⚡</span> Create Room
+        </button>
+
         <div class="divider"><span>OR JOIN</span></div>
+
         <div class="input-group">
           <label for="input-code">Room Code</label>
           <input type="text" id="input-code" placeholder="XXXXXX" maxlength="6" autocomplete="off" style="text-transform:uppercase;letter-spacing:.3em;text-align:center;font-size:1.2rem;">
         </div>
-        <button id="btn-join" class="btn btn-secondary btn-large" disabled>Join Room</button>
+
+        <!-- Join Password (shown when joining private rooms) -->
+        <div id="join-password-group" class="input-group" style="display:none;">
+          <label for="input-join-password">Room Password</label>
+          <input type="password" id="input-join-password" placeholder="Enter room password" maxlength="20" autocomplete="off">
+        </div>
+
+        <button id="btn-join" class="btn btn-secondary btn-large" disabled>
+          <span class="btn-icon-left">🚪</span> Join Room
+        </button>
+
+        <button id="btn-quick-play" class="btn btn-quick-play btn-large">
+          <span class="btn-icon-left">🎲</span> Quick Play
+          <span class="quick-play-badge">BETA</span>
+        </button>
+
         <p id="landing-error" class="error-text"></p>
       </div>
       <footer class="landing-footer">
@@ -751,6 +838,153 @@
     <div class="modal modal-custom" id="custom-modal-content"></div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- MODAL: STORE                                            -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="modal-store" class="modal-overlay" style="display:none;">
+    <div class="modal modal-store">
+      <div class="modal-header store-header">
+        <h3>🛒 Empire Store</h3>
+        <div class="store-coins">
+          <span class="coin-icon">🪙</span>
+          <span id="store-coin-display" class="store-coin-amount">500</span>
+        </div>
+        <button id="btn-close-store" class="btn btn-icon modal-close-btn">✕</button>
+      </div>
+      <div class="store-tabs">
+        <button class="store-tab active" data-store-tab="maps">🗺️ Maps</button>
+        <button class="store-tab" data-store-tab="tokens">🎭 Tokens</button>
+        <button class="store-tab" data-store-tab="themes">🎨 Themes</button>
+        <button class="store-tab" data-store-tab="effects">✨ Effects</button>
+        <button class="store-tab" data-store-tab="coins">🪙 Get Coins</button>
+      </div>
+      <div class="modal-body store-body">
+        <div id="store-content" class="store-grid">
+          <!-- JS populates store items -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- MODAL: PROFILE / EMAIL                                  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="modal-profile" class="modal-overlay" style="display:none;">
+    <div class="modal modal-profile">
+      <div class="modal-header">
+        <h3>👤 Your Profile</h3>
+        <button id="btn-close-profile" class="btn btn-icon modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="profile-avatar-section">
+          <div id="profile-avatar" class="profile-avatar">
+            <span class="profile-avatar-icon">👤</span>
+          </div>
+          <div class="profile-info">
+            <h4 id="profile-display-name" class="profile-name">Guest Player</h4>
+            <span id="profile-level" class="profile-level-badge">Level 1</span>
+          </div>
+        </div>
+
+        <div class="profile-xp-bar">
+          <div class="xp-bar-bg">
+            <div id="profile-xp-fill" class="xp-bar-fill" style="width:25%"></div>
+          </div>
+          <span class="xp-label">250 / 1000 XP</span>
+        </div>
+
+        <div class="profile-stats-grid">
+          <div class="profile-stat">
+            <span class="stat-value" id="stat-games">0</span>
+            <span class="stat-label">Games</span>
+          </div>
+          <div class="profile-stat">
+            <span class="stat-value" id="stat-wins">0</span>
+            <span class="stat-label">Wins</span>
+          </div>
+          <div class="profile-stat">
+            <span class="stat-value" id="stat-coins">500</span>
+            <span class="stat-label">Coins</span>
+          </div>
+          <div class="profile-stat">
+            <span class="stat-value" id="stat-streak">0</span>
+            <span class="stat-label">Win Streak</span>
+          </div>
+        </div>
+
+        <div class="divider"><span>CONNECT EMAIL</span></div>
+
+        <div class="profile-email-section">
+          <p class="profile-email-desc">Save your progress, get notifications for events, and unlock exclusive rewards!</p>
+          <div class="input-group">
+            <label for="input-email">Email Address</label>
+            <input type="email" id="input-email" placeholder="your@email.com" maxlength="100" autocomplete="email">
+          </div>
+          <div id="email-status" class="email-status"></div>
+          <button id="btn-save-email" class="btn btn-primary">
+            <span>📧</span> Connect Email
+          </button>
+          <p class="email-privacy-note">🔒 We never share your email. Unsubscribe anytime.</p>
+        </div>
+
+        <div class="divider"><span>SETTINGS</span></div>
+
+        <div class="profile-settings">
+          <div class="settings-row">
+            <span class="settings-label">🔊 Sound Effects</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="setting-sfx" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">🎵 Music</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="setting-music" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">📱 Notifications</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="setting-notifs">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">🎨 Reduced Animations</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="setting-reduced-motion">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- MODAL: LEADERBOARD                                      -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="modal-leaderboard" class="modal-overlay" style="display:none;">
+    <div class="modal modal-leaderboard">
+      <div class="modal-header">
+        <h3>🏆 Global Rankings</h3>
+        <button id="btn-close-leaderboard" class="btn btn-icon modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="leaderboard-tabs">
+          <button class="lb-tab active" data-lb-tab="weekly">This Week</button>
+          <button class="lb-tab" data-lb-tab="alltime">All Time</button>
+          <button class="lb-tab" data-lb-tab="richest">Richest</button>
+        </div>
+        <div id="leaderboard-list" class="leaderboard-list">
+          <!-- JS populates leaderboard -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST -->
   <div id="toast" class="toast" aria-live="polite"></div>
 
@@ -766,6 +1000,9 @@
   <script src="turnTimer.js"></script>
   <script src="auction.js"></script>
   <script src="bot.js"></script>
+  <script src="store.js"></script>
+  <script src="profile.js"></script>
+  <script src="menu.js"></script>
   <script src="game.js"></script>
 
 </body>

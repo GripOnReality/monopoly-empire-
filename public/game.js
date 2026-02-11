@@ -953,7 +953,13 @@ MonopolyClient.prototype.createRoom = function() {
   this.myName = name;
   this.isHost = true;
   $('#landing-error').textContent = '';
-  this.socket.emit('create-room', { playerName: name });
+  var roomData = { playerName: name };
+  // Private room support
+  if (window.MenuSystem && window.MenuSystem.isPrivateRoom()) {
+    roomData.isPrivate = true;
+    roomData.password = window.MenuSystem.getPassword();
+  }
+  this.socket.emit('create-room', roomData);
 };
 
 MonopolyClient.prototype.joinRoom = function() {
@@ -963,7 +969,12 @@ MonopolyClient.prototype.joinRoom = function() {
   this.myName = name;
   this.isHost = false;
   $('#landing-error').textContent = '';
-  this.socket.emit('join-room', { playerName: name, roomCode: code });
+  var joinData = { playerName: name, roomCode: code };
+  // Private room password
+  if (window.MenuSystem && window.MenuSystem.getJoinPassword()) {
+    joinData.password = window.MenuSystem.getJoinPassword();
+  }
+  this.socket.emit('join-room', joinData);
 };
 
 MonopolyClient.prototype._onRoomCreated = function(data) {
