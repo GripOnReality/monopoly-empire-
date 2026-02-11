@@ -5372,3 +5372,312 @@ button:disabled {
   cursor: not-allowed;
   filter: grayscale(0.3);
 }
+
+/* ============================================================
+   47. CYBERPUNK SVG ASSETS
+   ============================================================ */
+
+/* ── Base SVG element classes ──────────────────────────────── */
+
+/* Token SVGs (inside board tokens) */
+.token-svg {
+  display: inline-block;
+  pointer-events: none;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* Space SVGs (railroad, utility, chance, chest, tax icons) */
+.space-svg {
+  display: block;
+  margin: 0 auto;
+  pointer-events: none;
+}
+
+/* UI SVGs (crown, money, cards, etc.) */
+.ui-svg {
+  display: inline-block;
+  vertical-align: middle;
+  pointer-events: none;
+}
+
+/* ── SVG Token overrides ──────────────────────────────────── */
+
+/* Override board-token defaults when SVG is active */
+.svg-token {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: transparent !important;
+  overflow: visible;
+}
+
+.board-token.svg-token {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  text-indent: -9999px;
+}
+
+.board-token.svg-token .token-svg {
+  text-indent: 0;
+  width: 20px;
+  height: 20px;
+}
+
+/* Current turn highlight for SVG tokens */
+.board-token.svg-token.current-player {
+  filter: drop-shadow(0 0 4px rgba(240, 200, 80, 0.6));
+  transform: scale(1.15);
+}
+
+/* ── Space icon containers with data-svg ──────────────────── */
+
+.space-icon[data-svg] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 20px;
+}
+
+/* When SVG is injected, hide any leftover emoji text */
+.space-icon[data-svg] .space-svg {
+  display: block;
+}
+
+/* Corner elements with injected SVGs */
+.corner-arrow[data-svg] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.corner-big[data-svg] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Crown icon containers */
+.crown-icon[data-svg="crown"],
+.center-crown[data-svg="crown"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Color band pattern overlay blending ──────────────────── */
+
+.color-band[style*="background"] {
+  background-blend-mode: overlay;
+  transition: background-image 0.3s ease;
+}
+
+/* ── Neon glow effects for SVG elements ───────────────────── */
+
+/* Subtle neon pulse on hover for space icons */
+.space-icon[data-svg]:hover .space-svg {
+  filter: drop-shadow(0 0 3px rgba(0, 240, 255, 0.5));
+  transition: filter 0.2s ease;
+}
+
+/* Neon glow class for animated elements */
+.neon-glow {
+  animation: svgNeonPulse 2.5s ease-in-out infinite;
+}
+
+/* Token SVG neon glow — subtle pulsing opacity */
+.token-svg .neon-glow {
+  animation: svgNeonPulse 2s ease-in-out infinite;
+}
+
+/* Neon glow for corner SVGs on hover */
+.corner-big[data-svg]:hover .space-svg,
+.corner-arrow[data-svg]:hover .space-svg {
+  filter: drop-shadow(0 0 5px rgba(0, 240, 255, 0.6))
+          drop-shadow(0 0 10px rgba(0, 240, 255, 0.3));
+  transition: filter 0.3s ease;
+}
+
+/* Crown SVG neon glow */
+[data-svg="crown"]:hover .ui-svg {
+  filter: drop-shadow(0 0 6px rgba(240, 200, 80, 0.5))
+          drop-shadow(0 0 12px rgba(240, 200, 80, 0.25));
+  transition: filter 0.3s ease;
+}
+
+/* Board center crown continuous glow */
+.center-crown[data-svg="crown"] .ui-svg {
+  filter: drop-shadow(0 0 4px rgba(240, 200, 80, 0.35));
+}
+
+/* ── SVG neon pulse keyframes ─────────────────────────────── */
+
+@keyframes svgNeonPulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes svgGlowPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px rgba(0, 240, 255, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.6));
+  }
+}
+
+/* SVG token hover glow */
+.board-token.svg-token:hover {
+  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.5));
+  transition: filter 0.2s ease;
+}
+
+/* ── Responsive SVG sizing ────────────────────────────────── */
+
+/* Tablet breakpoint */
+@media (max-width: 900px) {
+  .board-token.svg-token {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  .board-token.svg-token .token-svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .space-icon[data-svg] .space-svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .corner-big[data-svg] .space-svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .corner-arrow[data-svg] .space-svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .center-crown[data-svg="crown"] .ui-svg {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Mobile breakpoint */
+@media (max-width: 600px) {
+  .board-token.svg-token {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+  }
+
+  .board-token.svg-token .token-svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .space-icon[data-svg] .space-svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .corner-big[data-svg] .space-svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .corner-arrow[data-svg] .space-svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .center-crown[data-svg="crown"] .ui-svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .crown-icon[data-svg="crown"] .ui-svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Reduce glow intensity on mobile for performance */
+  .space-icon[data-svg]:hover .space-svg,
+  .corner-big[data-svg]:hover .space-svg {
+    filter: drop-shadow(0 0 2px rgba(0, 240, 255, 0.4));
+  }
+
+  [data-svg="crown"]:hover .ui-svg {
+    filter: drop-shadow(0 0 3px rgba(240, 200, 80, 0.4));
+  }
+
+  .board-token.svg-token:hover {
+    filter: drop-shadow(0 0 3px rgba(0, 240, 255, 0.4));
+  }
+
+  /* Disable continuous glow animations on mobile for perf */
+  .neon-glow,
+  .token-svg .neon-glow {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* Small mobile breakpoint */
+@media (max-width: 400px) {
+  .board-token.svg-token {
+    width: 14px;
+    height: 14px;
+    min-width: 14px;
+    min-height: 14px;
+  }
+
+  .board-token.svg-token .token-svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .space-icon[data-svg] .space-svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .corner-big[data-svg] .space-svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .corner-arrow[data-svg] .space-svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .center-crown[data-svg="crown"] .ui-svg {
+    width: 22px;
+    height: 22px;
+  }
+}
