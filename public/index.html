@@ -239,8 +239,23 @@
         <button id="btn-mortgage" class="btn btn-outline btn-action" disabled>🏦 Mortgage</button>
         <button id="btn-trade" class="btn btn-outline btn-action" disabled>🤝 Trade</button>
       </div>
+      <!-- Emoji Reaction Bar -->
+      <div id="emoji-reaction-bar" class="emoji-reaction-bar">
+        <button class="emoji-btn" data-emoji="😂" title="Laughing">😂</button>
+        <button class="emoji-btn" data-emoji="😤" title="Angry">😤</button>
+        <button class="emoji-btn" data-emoji="🔥" title="Fire">🔥</button>
+        <button class="emoji-btn" data-emoji="💀" title="Dead">💀</button>
+        <button class="emoji-btn" data-emoji="🤑" title="Money">🤑</button>
+        <button class="emoji-btn" data-emoji="😈" title="Evil">😈</button>
+        <button class="emoji-btn" data-emoji="👑" title="King">👑</button>
+        <button class="emoji-btn" data-emoji="😭" title="Crying">😭</button>
+      </div>
       <div id="player-cards" class="player-cards"></div>
-      <button id="btn-sound-toggle" class="btn btn-icon btn-sound" title="Toggle sound">🔊</button>
+      <div class="panel-bottom-tools">
+        <button id="btn-heatmap" class="btn btn-ghost btn-small btn-heatmap" title="Toggle Rent Heat Map">🔥 Heat Map</button>
+        <button id="btn-forfeit" class="btn btn-danger btn-action btn-forfeit" title="Forfeit — Leave the game">🏳️ Forfeit</button>
+        <button id="btn-sound-toggle" class="btn btn-icon btn-sound" title="Toggle sound">🔊</button>
+      </div>
     </aside>
 
     <!-- ═════════════════════════════════════════════ -->
@@ -811,9 +826,9 @@
     </div>
   </div>
 
-  <!-- MODAL: GAME OVER -->
+  <!-- MODAL: GAME OVER (expanded with post-game stats dashboard) -->
   <div id="modal-gameover" class="modal-overlay" style="display:none;">
-    <div class="modal modal-gameover">
+    <div class="modal modal-gameover modal-gameover-expanded">
       <div class="modal-header">
         <h3>🏆 Game Over</h3>
       </div>
@@ -823,8 +838,8 @@
           <h2 id="gameover-winner-name">—</h2>
           <p class="winner-label">WINS THE EMPIRE!</p>
         </div>
-        <div id="gameover-stats" class="gameover-stats">
-          <!-- JS populates final stats -->
+        <div id="gameover-stats" class="gameover-stats gameover-stats-expanded">
+          <!-- JS populates post-game stats dashboard -->
         </div>
       </div>
       <div class="modal-footer">
@@ -981,6 +996,22 @@
         <div id="leaderboard-list" class="leaderboard-list">
           <!-- JS populates leaderboard -->
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PROPERTY INFO (click-to-inspect) -->
+  <div id="modal-property-info" class="modal-overlay" style="display:none;">
+    <div class="modal modal-property-info">
+      <div class="modal-header">
+        <h3 id="propinfo-title">Property Details</h3>
+        <button id="btn-close-propinfo" class="btn btn-icon modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body" id="propinfo-body">
+        <!-- JS populates -->
+      </div>
+      <div class="modal-footer">
+        <button id="btn-propinfo-close" class="btn btn-secondary">Close</button>
       </div>
     </div>
   </div>

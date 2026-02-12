@@ -193,9 +193,20 @@ function makeToken(seatIndex, characterId) {
   div.setAttribute('data-seat', seatIndex);
   var ch = getCharacter(characterId);
   var tokenColor = ch ? ch.color : (PLAYER_COLORS[seatIndex] || '#888');
-  div.textContent = (seatIndex + 1);
-  div.style.background = tokenColor;
+
+  // Show character initial letter (e.g. "C" for Crimson) or fallback to seat number
+  var label = (ch && ch.name) ? ch.name.charAt(0).toUpperCase() : String(seatIndex + 1);
+  div.textContent = label;
+
+  // Gradient background for a polished look
+  var darkerColor = tokenColor; // base
+  div.style.background = 'linear-gradient(135deg, ' + tokenColor + ' 0%, ' + darkerColor + ' 60%, rgba(0,0,0,0.25) 100%)';
   div.style.color = (ch && ch.id === 'white') ? '#333' : '#fff';
+
+  // White border glow for visibility on any board color
+  div.style.border = '2px solid rgba(255,255,255,0.85)';
+  div.style.boxShadow = '0 0 6px rgba(255,255,255,0.5), 0 2px 8px rgba(0,0,0,0.5)';
+
   return div;
 }
 
@@ -807,6 +818,11 @@ function MonopolyClient() {
   this._characterConfirmed = {};
   this._myCharacter = null;
   this._gameStarted = false;
+
+  // Game stats tracker
+  this._stats = {};
+  // Emoji reaction cooldown
+  this._reactionCooldown = false;
 
   // Module references (initialized after socket connects)
   this.gameSettings = null;
@@ -1479,6 +1495,25 @@ MonopolyClient.prototype._startActualGame = function() {
   this.renderGame();
   this.addLog('Game started!');
   sfx('go');
+
+  // Initialize game stats tracking
+  this._stats = {};
+  this._statsStartTime = Date.now();
+  for (var si = 0; si < this.engine.players.length; si++) {
+    var sp = this.engine.players[si];
+    this._stats[sp.seatIndex] = {
+      name: sp.name, color: sp.color || PLAYER_COLORS[sp.seatIndex], characterId: sp.characterId,
+      rentPaid: 0, rentCollected: 0, propertiesBought: 0, housesBought: 0,
+      moneySpent: 0, moneyEarned: 0, timesPassedGo: 0, doublesRolled: 0,
+      turnsPlayed: 0, jailVisits: 0, luckiestRoll: 0, totalDiceSum: 0, diceRolls: 0,
+      biggestRentPaid: 0, biggestRentCollected: 0, peakMoney: sp.money,
+      diceDistribution: [0,0,0,0,0,0,0,0,0,0,0,0,0] // index 2-12
+    };
+  }
+
+  // Initialize heat map data
+  this._heatMapEnabled = false;
+  this._renderHeatMap();
 };
 
 /* ────────── DICE ────────── */
@@ -1506,6 +1541,16 @@ MonopolyClient.prototype._onDiceRolled = function(data) {
   sfx('dice');
 
   this.engine.lastDice = { die1: d1, die2: d2, total: d1 + d2, doubles: d1 === d2 };
+
+  // Track dice stats
+  if (this._stats && this._stats[data.seatIndex]) {
+    var ds = this._stats[data.seatIndex];
+    ds.diceRolls++;
+    ds.totalDiceSum += d1 + d2;
+    if (d1 + d2 >= 2 && d1 + d2 <= 12) ds.diceDistribution[d1 + d2]++;
+    if (d1 + d2 > ds.luckiestRoll) ds.luckiestRoll = d1 + d2;
+    if (d1 === d2) ds.doublesRolled++;
+  }
 
   this.animateDice(d1, d2, function() {
     if (data.seatIndex === self.mySeat) {
@@ -1642,11 +1687,25 @@ MonopolyClient.prototype.handleMyRoll = function(data) {
   }
 
   var mr = this.engine.movePlayer(this.mySeat, total);
-  if (mr.passedGo) { this.addLog(cp.name + ' passed GO! +$200'); sfx('go'); }
+  if (mr.passedGo) {
+    this.addLog(cp.name + ' passed GO! +$200'); sfx('go');
+    if (this._stats && this._stats[this.mySeat]) { this._stats[this.mySeat].timesPassedGo++; this._stats[this.mySeat].moneyEarned += 200; }
+  }
+  // Track turn + peak money
+  if (this._stats && this._stats[this.mySeat]) {
+    this._stats[this.mySeat].turnsPlayed++;
+    if (cp.money > this._stats[this.mySeat].peakMoney) this._stats[this.mySeat].peakMoney = cp.money;
+  }
   this.addLog(cp.name + ' rolled ' + d1 + '+' + d2 + '=' + total + ', landed on ' + BOARD_DATA[mr.newPos].name);
-  this.renderGame();
-  this.syncState();
-  this.handleLanding(mr.newPos);
+
+  // Animate token hopping space-by-space, then render + handle landing
+  var fromPos = (mr.newPos - total + 40) % 40;
+  var self2 = this;
+  this.animateTokenHop(this.mySeat, fromPos, mr.newPos, function() {
+    self2.renderGame();
+    self2.syncState();
+    self2.handleLanding(mr.newPos);
+  });
 };
 
 /* ────────── LANDING LOGIC ────────── */
@@ -1844,6 +1903,11 @@ MonopolyClient.prototype.confirmBuy = function() {
     this.broadcastAction('property-bought', { seat: this.mySeat, pos: pos });
     this.syncState();
     this.flashMoney(this.mySeat, -(space.price || 0));
+    // Track stats
+    if (this._stats && this._stats[this.mySeat]) {
+      this._stats[this.mySeat].propertiesBought++;
+      this._stats[this.mySeat].moneySpent += space.price;
+    }
   }
   this.closeModal('modal-buy');
   this.engine.gamePhase = 'action';
@@ -1890,6 +1954,20 @@ MonopolyClient.prototype.payRent = function() {
   cp.money -= rent;
   var ownerP = this.engine.getPlayer(creditor);
   if (ownerP) ownerP.money += rent;
+
+  // Track rent stats
+  if (this._stats) {
+    if (this._stats[this.mySeat]) {
+      this._stats[this.mySeat].rentPaid += rent;
+      this._stats[this.mySeat].moneySpent += rent;
+      if (rent > this._stats[this.mySeat].biggestRentPaid) this._stats[this.mySeat].biggestRentPaid = rent;
+    }
+    if (creditor !== null && creditor !== undefined && this._stats[creditor]) {
+      this._stats[creditor].rentCollected += rent;
+      this._stats[creditor].moneyEarned += rent;
+      if (rent > this._stats[creditor].biggestRentCollected) this._stats[creditor].biggestRentCollected = rent;
+    }
+  }
 
   this.addLog(cp.name + ' paid $' + rent + ' rent to ' + (ownerP ? ownerP.name : 'bank'));
   this.broadcastAction('rent-paid', { seat: this.mySeat, creditor: creditor, amount: rent, pos: this._rentPos });
@@ -2310,43 +2388,7 @@ MonopolyClient.prototype.checkBankrupt = function(player, creditorSeat) {
   }
 };
 
-/* ── GAME OVER MODAL ── */
-MonopolyClient.prototype.showGameOverModal = function(winner) {
-  playVictoryMusic();
-  var ch = getCharacter(winner.characterId);
-  var winToken = $('#gameover-winner-token');
-  if (winToken) {
-    winToken.textContent = winner.seatIndex + 1;
-    var wColor = ch ? ch.color : (winner.color || PLAYER_COLORS[winner.seatIndex]);
-    winToken.style.background = wColor;
-    winToken.style.width = '60px';
-    winToken.style.height = '60px';
-    winToken.style.borderRadius = '50%';
-    winToken.style.display = 'inline-flex';
-    winToken.style.alignItems = 'center';
-    winToken.style.justifyContent = 'center';
-    winToken.style.fontSize = '24px';
-    winToken.style.fontWeight = 'bold';
-    winToken.style.color = '#fff';
-    winToken.style.border = '3px solid rgba(255,255,255,0.5)';
-    winToken.style.margin = '0 auto 10px';
-  }
-  $('#gameover-winner-name').textContent = winner.name;
-
-  var stats = $('#gameover-stats');
-  var html = '';
-  var allP = this.engine.players;
-  for (var i = 0; i < allP.length; i++) {
-    var p = allP[i];
-    html += '<div style="display:flex;justify-content:space-between;padding:6px 10px;border-left:3px solid ' + (p.color || PLAYER_COLORS[p.seatIndex]) + ';margin:3px 0;background:rgba(255,255,255,0.05);border-radius:4px;">';
-    html += '<span style="font-size:13px;">' + escHtml(p.name) + '</span>';
-    html += '<span style="font-size:13px;color:' + (p.bankrupt ? '#e74c3c' : '#2ecc71') + ';">' + (p.bankrupt ? 'BANKRUPT' : ('$' + p.money)) + '</span>';
-    html += '</div>';
-  }
-  stats.innerHTML = html;
-
-  this.openModal('modal-gameover');
-};
+/* ── GAME OVER MODAL — moved to section 7d ── */
 
 /* ────────── TURN MANAGEMENT (SERVER AUTHORITATIVE) ────────── */
 MonopolyClient.prototype.endTurn = function() {
@@ -2534,6 +2576,12 @@ MonopolyClient.prototype._handleGameAction = function(data) {
         this.addLog('Trade rejected');
       }
       break;
+
+    case 'emoji-reaction':
+      if (payload.seat !== this.mySeat) {
+        this._showEmojiOnBoard(payload.seat, payload.emoji);
+      }
+      break;
   }
 };
 
@@ -2598,6 +2646,60 @@ MonopolyClient.prototype._bindGameButtons = function() {
     var on = SFX.toggle();
     this.textContent = on ? '🔊' : '🔇';
   });
+
+  // Property info modal close buttons
+  $('#btn-close-propinfo').addEventListener('click', function() { self.closeModal('modal-property-info'); });
+  $('#btn-propinfo-close').addEventListener('click', function() { self.closeModal('modal-property-info'); });
+
+  // Emoji reaction bar
+  var emojiBar = $('#emoji-reaction-bar');
+  if (emojiBar) {
+    var emojiBtns = emojiBar.querySelectorAll('.emoji-btn');
+    for (var eb = 0; eb < emojiBtns.length; eb++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          if (self._reactionCooldown) return;
+          var emoji = btn.getAttribute('data-emoji');
+          self._reactionCooldown = true;
+          setTimeout(function() { self._reactionCooldown = false; }, 1500);
+          self._showEmojiOnBoard(self.mySeat, emoji);
+          self.broadcastAction('emoji-reaction', { seat: self.mySeat, emoji: emoji });
+          sfx('click');
+        });
+      })(emojiBtns[eb]);
+    }
+  }
+
+  // Heat map toggle
+  var heatBtn = $('#btn-heatmap');
+  if (heatBtn) {
+    heatBtn.addEventListener('click', function() {
+      self._heatMapEnabled = !self._heatMapEnabled;
+      heatBtn.classList.toggle('active', self._heatMapEnabled);
+      self._renderHeatMap();
+    });
+  }
+
+  // Forfeit button — voluntary bankruptcy
+  $('#btn-forfeit').addEventListener('click', function() {
+    if (!self._gameStarted) return;
+    var cp = self.engine.currentPlayer();
+    if (!cp || cp.seatIndex !== self.mySeat) {
+      self.showCustomModal('<div style="text-align:center;padding:16px;"><h3>Not Your Turn</h3><p>You can only forfeit on your turn.</p><br><button class="btn btn-secondary" onclick="window.monopoly.closeCustomModal()">OK</button></div>');
+      return;
+    }
+    if (cp.bankrupt) return;
+    self.showCustomModal(
+      '<div style="text-align:center;padding:16px;">' +
+        '<h3 style="color:#e74c3c;">🏳️ Forfeit Game?</h3>' +
+        '<p style="margin:12px 0;">Are you sure you want to forfeit?<br>All your properties and money will be returned to the bank.<br><strong>This cannot be undone.</strong></p>' +
+        '<div style="display:flex;gap:12px;justify-content:center;margin-top:16px;">' +
+          '<button class="btn btn-secondary" onclick="window.monopoly.closeCustomModal()">Cancel</button>' +
+          '<button class="btn btn-danger" onclick="window.monopoly.closeCustomModal(); window.monopoly.confirmBankruptcy(null);">Confirm Forfeit</button>' +
+        '</div>' +
+      '</div>'
+    );
+  });
 };
 
 /* ────────── RENDERING ────────── */
@@ -2609,11 +2711,15 @@ MonopolyClient.prototype.renderGame = function() {
   this.renderTurnBanner();
   this.updateButtons();
   this._setupSpaceTooltips();
+  if (this._heatMapEnabled) this._renderHeatMap();
 };
 
 MonopolyClient.prototype.renderTokensOnBoard = function() {
   var areas = $$('.token-area');
   for (var i = 0; i < areas.length; i++) areas[i].innerHTML = '';
+
+  // Track previous positions for move animation
+  if (!this._prevPositions) this._prevPositions = {};
 
   var players = this.engine.players;
   var currentTurn = this.engine.currentTurn;
@@ -2626,7 +2732,19 @@ MonopolyClient.prototype.renderTokensOnBoard = function() {
     if (!area) continue;
     var tok = makeToken(p.seatIndex, p.characterId);
     if (p.seatIndex === currentTurn) tok.classList.add('current-player');
+
+    // Tooltip showing player name + location
+    var spaceName = BOARD_DATA[p.position] ? BOARD_DATA[p.position].name : ('Space ' + p.position);
+    tok.setAttribute('title', (p.name || ('Player ' + (p.seatIndex + 1))) + ' — ' + spaceName);
+
+    // Add 'moving' class when position changed since last render
+    var prevPos = this._prevPositions[p.seatIndex];
+    if (prevPos !== undefined && prevPos !== p.position) {
+      tok.classList.add('moving');
+    }
+
     area.appendChild(tok);
+    this._prevPositions[p.seatIndex] = p.position;
   }
 };
 
@@ -2833,6 +2951,7 @@ MonopolyClient.prototype._setupSpaceTooltips = function() {
   var spaces = $$('.space[data-pos]');
   for (var i = 0; i < spaces.length; i++) {
     (function(spaceEl) {
+      // Hover tooltip (original)
       spaceEl.addEventListener('mouseenter', function(e) {
         var pos = parseInt(spaceEl.getAttribute('data-pos'), 10);
         if (isNaN(pos)) return;
@@ -2886,8 +3005,126 @@ MonopolyClient.prototype._setupSpaceTooltips = function() {
       spaceEl.addEventListener('mouseleave', function() {
         tooltip.style.display = 'none';
       });
+
+      // Click handler — open property info modal for purchasable spaces
+      spaceEl.addEventListener('click', function() {
+        var pos = parseInt(spaceEl.getAttribute('data-pos'), 10);
+        if (isNaN(pos)) return;
+        var space = BOARD_DATA[pos];
+        if (!space) return;
+        // Only open for property, railroad, or utility spaces
+        if (space.type === 'property' || space.type === 'railroad' || space.type === 'utility') {
+          tooltip.style.display = 'none'; // hide hover tooltip
+          self.showPropertyInfoModal(pos);
+        }
+      });
     })(spaces[i]);
   }
+};
+
+/* ────────── PROPERTY INFO MODAL ────────── */
+MonopolyClient.prototype.showPropertyInfoModal = function(pos) {
+  var space = BOARD_DATA[pos];
+  if (!space) return;
+
+  var titleEl = $('#propinfo-title');
+  var bodyEl = $('#propinfo-body');
+  if (!titleEl || !bodyEl) return;
+
+  titleEl.textContent = space.name;
+
+  var ps = this.engine.propertyState[pos];
+  var groupColor = (space.group && GROUP_COLORS[space.group]) ? GROUP_COLORS[space.group] : '#555';
+  var html = '';
+
+  // Color band for properties
+  if (space.group) {
+    html += '<div class="propinfo-color-band" style="background:' + groupColor + ';"></div>';
+  }
+
+  html += '<div class="propinfo-card">';
+
+  // Price
+  html += '<div class="propinfo-row"><span class="propinfo-label">Price</span><span class="propinfo-value">$' + space.price + '</span></div>';
+
+  // Mortgage value
+  if (space.mortgage) {
+    html += '<div class="propinfo-row"><span class="propinfo-label">Mortgage Value</span><span class="propinfo-value">$' + space.mortgage + '</span></div>';
+  }
+
+  // Owner
+  if (ps && ps.owner !== null && ps.owner !== undefined) {
+    var ownerP = this.engine.getPlayer(ps.owner);
+    var ownerColor = PLAYER_COLORS[ps.owner] || '#888';
+    var ownerName = ownerP ? escHtml(ownerP.name) : 'Player ' + (ps.owner + 1);
+    html += '<div class="propinfo-owner-row">';
+    html += '<span class="propinfo-label">Owner</span>';
+    html += '<span class="propinfo-value"><span class="propinfo-owner-dot" style="background:' + ownerColor + ';"></span> ' + ownerName + '</span>';
+    html += '</div>';
+  } else {
+    html += '<div class="propinfo-row"><span class="propinfo-label">Owner</span><span class="propinfo-value" style="opacity:0.6;">Unowned</span></div>';
+  }
+
+  // Status (mortgage / houses)
+  if (ps) {
+    if (ps.mortgaged) {
+      html += '<div class="propinfo-status propinfo-mortgaged">🏦 MORTGAGED</div>';
+    }
+    if (space.type === 'property' && ps.houses > 0) {
+      var houseLabel = ps.houses === 5 ? '🏨 Hotel' : ('🏠 ' + ps.houses + ' House' + (ps.houses > 1 ? 's' : ''));
+      html += '<div class="propinfo-status">' + houseLabel + '</div>';
+    }
+  }
+
+  // Type-specific details
+  if (space.type === 'property' && space.rent) {
+    // House cost
+    html += '<div class="propinfo-row"><span class="propinfo-label">House Cost</span><span class="propinfo-value">$' + space.houseCost + '</span></div>';
+
+    // Full rent table
+    html += '<div class="propinfo-section-title">Rent Schedule</div>';
+    html += '<table class="propinfo-rent-table">';
+    html += '<tr><th>Level</th><th>Rent</th></tr>';
+    var rentLabels = ['Base Rent', '1 House', '2 Houses', '3 Houses', '4 Houses', 'Hotel'];
+    for (var r = 0; r < space.rent.length; r++) {
+      var isActive = ps && !ps.mortgaged && (ps.houses || 0) === r;
+      html += '<tr' + (isActive ? ' class="propinfo-active-rent"' : '') + '>';
+      html += '<td>' + rentLabels[r] + '</td>';
+      html += '<td>$' + space.rent[r] + (r === 0 ? ' <span class="propinfo-note">(×2 with monopoly)</span>' : '') + '</td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+  } else if (space.type === 'railroad') {
+    html += '<div class="propinfo-section-title">Railroad Rent</div>';
+    html += '<table class="propinfo-rent-table">';
+    html += '<tr><th>Railroads Owned</th><th>Rent</th></tr>';
+    var rrRents = [25, 50, 100, 200];
+    var ownedRRCount = (ps && ps.owner !== null && ps.owner !== undefined) ? this.engine.getOwnedRailroadCount(ps.owner) : 0;
+    for (var ri = 0; ri < 4; ri++) {
+      var isActiveRR = (ownedRRCount === ri + 1) && ps && !ps.mortgaged;
+      html += '<tr' + (isActiveRR ? ' class="propinfo-active-rent"' : '') + '>';
+      html += '<td>' + (ri + 1) + ' Railroad' + (ri > 0 ? 's' : '') + '</td>';
+      html += '<td>$' + rrRents[ri] + '</td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+  } else if (space.type === 'utility') {
+    html += '<div class="propinfo-section-title">Utility Rent</div>';
+    html += '<table class="propinfo-rent-table">';
+    html += '<tr><th>Utilities Owned</th><th>Multiplier</th></tr>';
+    var ownedUCount = (ps && ps.owner !== null && ps.owner !== undefined) ? this.engine.getOwnedUtilityCount(ps.owner) : 0;
+    var isActiveU1 = (ownedUCount === 1) && ps && !ps.mortgaged;
+    var isActiveU2 = (ownedUCount === 2) && ps && !ps.mortgaged;
+    html += '<tr' + (isActiveU1 ? ' class="propinfo-active-rent"' : '') + '><td>1 Utility</td><td>4× dice roll</td></tr>';
+    html += '<tr' + (isActiveU2 ? ' class="propinfo-active-rent"' : '') + '><td>2 Utilities</td><td>10× dice roll</td></tr>';
+    html += '</table>';
+    html += '<div class="propinfo-note" style="margin-top:8px;text-align:center;">Rent = multiplier × sum of dice rolled by visitor</div>';
+  }
+
+  html += '</div>'; // .propinfo-card
+
+  bodyEl.innerHTML = html;
+  this.openModal('modal-property-info');
 };
 
 /* ────────── FLOATING TEXT ────────── */
@@ -3059,6 +3296,268 @@ MonopolyClient.prototype._renderBotSlots = function() {
       });
     })(removeBtns[r]);
   }
+};
+
+/* ──────────────────────────────────────
+   7a. EMOJI REACTIONS
+   ────────────────────────────────────── */
+MonopolyClient.prototype._showEmojiOnBoard = function(seatIndex, emoji) {
+  var player = this.engine.getPlayer(seatIndex);
+  if (!player || player.bankrupt) return;
+  var spaceEl = document.getElementById('space-' + player.position);
+  if (!spaceEl) return;
+
+  var rect = spaceEl.getBoundingClientRect();
+  var el = document.createElement('div');
+  el.className = 'board-emoji-reaction';
+  el.textContent = emoji;
+  el.style.left = (rect.left + rect.width / 2) + 'px';
+  el.style.top = (rect.top) + 'px';
+
+  var color = player.color || PLAYER_COLORS[seatIndex] || '#fff';
+  el.style.textShadow = '0 0 8px ' + color + ', 0 0 16px ' + color;
+
+  document.body.appendChild(el);
+  sfx('notification');
+  setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 2000);
+};
+
+/* ──────────────────────────────────────
+   7b. TOKEN HOP ANIMATION
+   ────────────────────────────────────── */
+MonopolyClient.prototype.animateTokenHop = function(seatIndex, fromPos, toPos, callback) {
+  if (fromPos === toPos) { if (callback) callback(); return; }
+  var self = this;
+  var player = this.engine.getPlayer(seatIndex);
+  if (!player) { if (callback) callback(); return; }
+
+  // Build path of positions to traverse
+  var path = [];
+  var cur = fromPos;
+  var maxSteps = 40;
+  while (cur !== toPos && maxSteps-- > 0) {
+    cur = (cur + 1) % 40;
+    path.push(cur);
+  }
+  if (path.length === 0) { if (callback) callback(); return; }
+
+  // Create a floating token that hops
+  var ch = getCharacter(player.characterId);
+  var tokenColor = ch ? ch.color : (PLAYER_COLORS[seatIndex] || '#888');
+  var label = (ch && ch.name) ? ch.name.charAt(0).toUpperCase() : String(seatIndex + 1);
+
+  var hopToken = document.createElement('div');
+  hopToken.className = 'board-token hop-token';
+  hopToken.textContent = label;
+  hopToken.style.background = 'linear-gradient(135deg, ' + tokenColor + ' 0%, ' + tokenColor + ' 60%, rgba(0,0,0,0.25) 100%)';
+  hopToken.style.color = (ch && ch.id === 'white') ? '#333' : '#fff';
+  hopToken.style.border = '2px solid rgba(255,255,255,0.85)';
+  hopToken.style.boxShadow = '0 0 10px ' + tokenColor + ', 0 4px 12px rgba(0,0,0,0.6)';
+  hopToken.style.position = 'fixed';
+  hopToken.style.zIndex = '500';
+  hopToken.style.pointerEvents = 'none';
+  document.body.appendChild(hopToken);
+
+  // Hide the static token for this player during hop
+  var existingTokens = document.querySelectorAll('.board-token[data-seat="' + seatIndex + '"]');
+  for (var et = 0; et < existingTokens.length; et++) existingTokens[et].style.visibility = 'hidden';
+
+  var stepDelay = Math.min(120, Math.max(50, 600 / path.length)); // faster for long moves
+  var stepIdx = 0;
+
+  function hopStep() {
+    if (stepIdx >= path.length) {
+      if (hopToken.parentNode) hopToken.parentNode.removeChild(hopToken);
+      // Restore static tokens
+      var restored = document.querySelectorAll('.board-token[data-seat="' + seatIndex + '"]');
+      for (var rt = 0; rt < restored.length; rt++) restored[rt].style.visibility = '';
+      if (callback) callback();
+      return;
+    }
+    var posNow = path[stepIdx];
+    var spaceEl = document.getElementById('space-' + posNow);
+    if (spaceEl) {
+      var rect = spaceEl.getBoundingClientRect();
+      hopToken.style.left = (rect.left + rect.width / 2 - 10) + 'px';
+      hopToken.style.top = (rect.top + rect.height / 2 - 10) + 'px';
+      hopToken.style.transform = 'translateY(-8px) scale(1.2)';
+      setTimeout(function() { hopToken.style.transform = 'translateY(0) scale(1)'; }, stepDelay * 0.4);
+    }
+    stepIdx++;
+    setTimeout(hopStep, stepDelay);
+  }
+
+  // Start from current position
+  var startEl = document.getElementById('space-' + fromPos);
+  if (startEl) {
+    var startRect = startEl.getBoundingClientRect();
+    hopToken.style.left = (startRect.left + startRect.width / 2 - 10) + 'px';
+    hopToken.style.top = (startRect.top + startRect.height / 2 - 10) + 'px';
+  }
+  setTimeout(hopStep, stepDelay);
+};
+
+/* ──────────────────────────────────────
+   7c. HEAT MAP OVERLAY
+   ────────────────────────────────────── */
+MonopolyClient.prototype._renderHeatMap = function() {
+  // Remove existing heat overlays
+  var oldGlows = $$('.heat-glow');
+  for (var g = 0; g < oldGlows.length; g++) oldGlows[g].remove();
+
+  if (!this._heatMapEnabled) return;
+
+  // Calculate rent income potential for each space
+  var maxRent = 1;
+  var rents = {};
+  for (var pos = 0; pos < 40; pos++) {
+    var space = BOARD_DATA[pos];
+    if (!space || !space.price) continue;
+    var ps = this.engine.propertyState[pos];
+    if (!ps || ps.owner === null || ps.owner === undefined || ps.mortgaged) continue;
+    var rent = this.engine.calculateRent(pos, 7);
+    rents[pos] = rent;
+    if (rent > maxRent) maxRent = rent;
+  }
+
+  // Apply heat glow to spaces
+  for (var hpos in rents) {
+    if (!rents.hasOwnProperty(hpos)) continue;
+    var spaceEl = document.getElementById('space-' + hpos);
+    if (!spaceEl) continue;
+    var intensity = rents[hpos] / maxRent;
+    var glow = document.createElement('div');
+    glow.className = 'heat-glow';
+
+    // Color: green (low) → yellow (medium) → red (high)
+    var r, green, b;
+    if (intensity < 0.5) {
+      r = Math.round(255 * (intensity * 2));
+      green = 255;
+      b = 0;
+    } else {
+      r = 255;
+      green = Math.round(255 * (1 - (intensity - 0.5) * 2));
+      b = 0;
+    }
+    var heatColor = 'rgb(' + r + ',' + green + ',' + b + ')';
+    var alpha = 0.08 + intensity * 0.35;
+
+    glow.style.cssText = 'position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;' +
+      'background:radial-gradient(ellipse at center, rgba(' + r + ',' + green + ',' + b + ',' + alpha.toFixed(2) + ') 0%, transparent 70%);' +
+      'box-shadow:inset 0 0 ' + Math.round(8 + intensity * 20) + 'px rgba(' + r + ',' + green + ',' + b + ',' + (alpha * 0.6).toFixed(2) + ');';
+
+    spaceEl.appendChild(glow);
+  }
+};
+
+/* ──────────────────────────────────────
+   7d. POST-GAME STATS DASHBOARD
+   ────────────────────────────────────── */
+MonopolyClient.prototype.showGameOverModal = function(winner) {
+  playVictoryMusic();
+  var ch = getCharacter(winner.characterId);
+  var winToken = $('#gameover-winner-token');
+  if (winToken) {
+    winToken.textContent = winner.seatIndex + 1;
+    var wColor = ch ? ch.color : (winner.color || PLAYER_COLORS[winner.seatIndex]);
+    winToken.style.background = wColor;
+    winToken.style.width = '60px';
+    winToken.style.height = '60px';
+    winToken.style.borderRadius = '50%';
+    winToken.style.display = 'inline-flex';
+    winToken.style.alignItems = 'center';
+    winToken.style.justifyContent = 'center';
+    winToken.style.fontSize = '24px';
+    winToken.style.fontWeight = 'bold';
+    winToken.style.color = '#fff';
+    winToken.style.border = '3px solid rgba(255,255,255,0.5)';
+    winToken.style.margin = '0 auto 10px';
+  }
+  $('#gameover-winner-name').textContent = winner.name;
+
+  var stats = $('#gameover-stats');
+  var gameDuration = this._statsStartTime ? Math.round((Date.now() - this._statsStartTime) / 1000) : 0;
+  var dMins = Math.floor(gameDuration / 60);
+  var dSecs = gameDuration % 60;
+
+  var html = '';
+  html += '<div class="postgame-duration">⏱ Game Duration: <strong>' + dMins + 'm ' + dSecs + 's</strong> | Turn ' + this.engine.turnNumber + '</div>';
+
+  var allP = this.engine.players;
+  for (var i = 0; i < allP.length; i++) {
+    var p = allP[i];
+    var s = (this._stats && this._stats[p.seatIndex]) ? this._stats[p.seatIndex] : null;
+    var pColor = p.color || PLAYER_COLORS[p.seatIndex];
+    var isWinner = (p.seatIndex === winner.seatIndex);
+
+    html += '<div class="postgame-player' + (isWinner ? ' postgame-winner' : '') + (p.bankrupt ? ' postgame-bankrupt' : '') + '" style="border-left-color:' + pColor + ';">';
+    html += '<div class="postgame-player-header">';
+    html += '<span class="postgame-player-name" style="color:' + pColor + ';">' + (isWinner ? '👑 ' : '') + escHtml(p.name) + '</span>';
+    html += '<span class="postgame-player-money" style="color:' + (p.bankrupt ? '#e74c3c' : '#2ecc71') + ';">' + (p.bankrupt ? 'BANKRUPT' : ('$' + p.money)) + '</span>';
+    html += '</div>';
+
+    if (s) {
+      html += '<div class="postgame-stats-grid">';
+      html += '<div class="postgame-stat"><span class="postgame-stat-val">' + s.propertiesBought + '</span><span class="postgame-stat-lbl">Properties</span></div>';
+      html += '<div class="postgame-stat"><span class="postgame-stat-val">$' + s.rentCollected + '</span><span class="postgame-stat-lbl">Rent Earned</span></div>';
+      html += '<div class="postgame-stat"><span class="postgame-stat-val">$' + s.rentPaid + '</span><span class="postgame-stat-lbl">Rent Paid</span></div>';
+      html += '<div class="postgame-stat"><span class="postgame-stat-val">$' + s.peakMoney + '</span><span class="postgame-stat-lbl">Peak $</span></div>';
+      html += '<div class="postgame-stat"><span class="postgame-stat-val">' + s.turnsPlayed + '</span><span class="postgame-stat-lbl">Turns</span></div>';
+      html += '<div class="postgame-stat"><span class="postgame-stat-val">' + s.doublesRolled + '</span><span class="postgame-stat-lbl">Doubles</span></div>';
+      html += '</div>';
+
+      // Biggest moments
+      var moments = [];
+      if (s.biggestRentCollected > 0) moments.push('💰 Biggest rent: $' + s.biggestRentCollected);
+      if (s.biggestRentPaid > 0) moments.push('😤 Biggest bill: $' + s.biggestRentPaid);
+      if (s.timesPassedGo > 0) moments.push('🔄 Passed GO: ' + s.timesPassedGo + 'x');
+      if (s.jailVisits > 0) moments.push('🔒 Jail visits: ' + s.jailVisits);
+      if (moments.length > 0) {
+        html += '<div class="postgame-moments">' + moments.join(' <span class="postgame-divider">·</span> ') + '</div>';
+      }
+
+      // Dice distribution mini chart
+      if (s.diceRolls > 0) {
+        var avgRoll = (s.totalDiceSum / s.diceRolls).toFixed(1);
+        html += '<div class="postgame-dice-section">';
+        html += '<span class="postgame-dice-avg">🎲 Avg roll: ' + avgRoll + '</span>';
+        html += '<div class="postgame-dice-chart">';
+        var maxFreq = 1;
+        for (var di = 2; di <= 12; di++) { if (s.diceDistribution[di] > maxFreq) maxFreq = s.diceDistribution[di]; }
+        for (var dj = 2; dj <= 12; dj++) {
+          var freq = s.diceDistribution[dj] || 0;
+          var barH = maxFreq > 0 ? Math.round((freq / maxFreq) * 100) : 0;
+          html += '<div class="dice-bar-col" title="' + dj + ': rolled ' + freq + 'x">';
+          html += '<div class="dice-bar-fill" style="height:' + barH + '%;background:' + pColor + ';"></div>';
+          html += '<span class="dice-bar-label">' + dj + '</span>';
+          html += '</div>';
+        }
+        html += '</div></div>';
+      }
+    }
+    html += '</div>';
+  }
+
+  // MVP awards
+  html += '<div class="postgame-awards">';
+  var bestLandlord = null, bestLandlordVal = 0;
+  var bestSpender = null, bestSpenderVal = 0;
+  var luckiest = null, luckiestVal = 0;
+  for (var ai = 0; ai < allP.length; ai++) {
+    var as = (this._stats && this._stats[allP[ai].seatIndex]) ? this._stats[allP[ai].seatIndex] : null;
+    if (!as) continue;
+    if (as.rentCollected > bestLandlordVal) { bestLandlordVal = as.rentCollected; bestLandlord = allP[ai]; }
+    if (as.moneySpent > bestSpenderVal) { bestSpenderVal = as.moneySpent; bestSpender = allP[ai]; }
+    if (as.diceRolls > 0 && (as.totalDiceSum / as.diceRolls) > luckiestVal) { luckiestVal = as.totalDiceSum / as.diceRolls; luckiest = allP[ai]; }
+  }
+  if (bestLandlord) html += '<div class="postgame-award"><span class="award-icon">🏠</span><span class="award-text">Top Landlord: <strong>' + escHtml(bestLandlord.name) + '</strong> ($' + bestLandlordVal + ')</span></div>';
+  if (bestSpender) html += '<div class="postgame-award"><span class="award-icon">💸</span><span class="award-text">Big Spender: <strong>' + escHtml(bestSpender.name) + '</strong> ($' + bestSpenderVal + ')</span></div>';
+  if (luckiest) html += '<div class="postgame-award"><span class="award-icon">🍀</span><span class="award-text">Luckiest Dice: <strong>' + escHtml(luckiest.name) + '</strong> (avg ' + luckiestVal.toFixed(1) + ')</span></div>';
+  html += '</div>';
+
+  stats.innerHTML = html;
+  this.openModal('modal-gameover');
 };
 
 /* ──────────────────────────────────────

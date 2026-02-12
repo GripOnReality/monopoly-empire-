@@ -6768,3 +6768,471 @@ button:disabled {
     font-size: 2rem;
   }
 }
+
+/* ============================================================
+   57. PROPERTY INFO MODAL (click-to-inspect)
+   ============================================================ */
+.modal-property-info {
+  max-width: 420px;
+  width: 92vw;
+}
+
+.propinfo-color-band {
+  height: 10px;
+  border-radius: 6px 6px 0 0;
+  margin: -16px -20px 14px -20px;
+}
+
+.propinfo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.propinfo-row,
+.propinfo-owner-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.propinfo-label {
+  font-size: 0.85rem;
+  color: var(--text-muted, #aaa);
+}
+
+.propinfo-value {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.propinfo-owner-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+  border: 1.5px solid rgba(255,255,255,0.3);
+}
+
+.propinfo-status {
+  text-align: center;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-top: 4px;
+}
+
+.propinfo-status.propinfo-mortgaged {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+}
+
+.propinfo-section-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted, #aaa);
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
+.propinfo-rent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.propinfo-rent-table th {
+  text-align: left;
+  padding: 5px 8px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted, #aaa);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.propinfo-rent-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.propinfo-rent-table tr.propinfo-active-rent {
+  background: rgba(46, 204, 113, 0.12);
+  border-radius: 4px;
+}
+
+.propinfo-rent-table tr.propinfo-active-rent td {
+  font-weight: 700;
+  color: #2ecc71;
+}
+
+.propinfo-note {
+  font-size: 0.75rem;
+  color: var(--text-muted, #aaa);
+  font-weight: 400;
+}
+
+/* ============================================================
+   58. FORFEIT BUTTON
+   ============================================================ */
+.btn-forfeit {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: transparent;
+  color: #e74c3c;
+  border: 1.5px solid rgba(231, 76, 60, 0.35);
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.btn-forfeit:hover {
+  opacity: 1;
+  background: rgba(231, 76, 60, 0.1);
+  border-color: #e74c3c;
+}
+
+
+/* ============================================================
+   59. EMOJI REACTION BAR
+   ============================================================ */
+.emoji-reaction-bar {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.emoji-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 1.15rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.emoji-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-light);
+  transform: scale(1.25);
+}
+
+.emoji-btn:active {
+  transform: scale(1.5);
+}
+
+/* Floating emoji that appears on the board */
+.board-emoji-reaction {
+  position: fixed;
+  font-size: 2.2rem;
+  pointer-events: none;
+  z-index: 600;
+  animation: emojiFloat 2s ease-out forwards;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
+  transform: translate(-50%, -50%);
+}
+
+@keyframes emojiFloat {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(0.5);
+  }
+  15% {
+    transform: translate(-50%, -10px) scale(1.3);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-50%, -50px) scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -120px) scale(0.6);
+    opacity: 0;
+  }
+}
+
+
+/* ============================================================
+   60. TOKEN HOP ANIMATION
+   ============================================================ */
+.hop-token {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  transition: left 0.08s ease, top 0.08s ease, transform 0.12s ease;
+  will-change: left, top, transform;
+}
+
+
+/* ============================================================
+   61. HEAT MAP OVERLAY
+   ============================================================ */
+.heat-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+  animation: heatPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes heatPulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.btn-heatmap {
+  font-size: 0.72rem !important;
+  padding: 4px 10px !important;
+  opacity: 0.7;
+  transition: all 0.2s;
+}
+
+.btn-heatmap:hover {
+  opacity: 1;
+}
+
+.btn-heatmap.active {
+  background: rgba(255, 100, 0, 0.15) !important;
+  border-color: #ff6400 !important;
+  color: #ff8c00 !important;
+  opacity: 1;
+}
+
+.panel-bottom-tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.panel-bottom-tools .btn-forfeit {
+  flex: 1;
+  margin-top: 0;
+}
+
+.panel-bottom-tools .btn-sound {
+  flex-shrink: 0;
+}
+
+
+/* ============================================================
+   62. POST-GAME STATS DASHBOARD
+   ============================================================ */
+.modal-gameover-expanded {
+  max-width: 620px !important;
+  width: 95% !important;
+}
+
+.gameover-stats-expanded {
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.postgame-duration {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border-radius: 8px;
+}
+
+.postgame-duration strong {
+  color: var(--gold);
+}
+
+.postgame-player {
+  border-left: 4px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  transition: all 0.2s;
+}
+
+.postgame-player:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.postgame-winner {
+  background: rgba(240, 200, 80, 0.06) !important;
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 16px var(--gold-glow);
+}
+
+.postgame-bankrupt {
+  opacity: 0.65;
+}
+
+.postgame-player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.postgame-player-name {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.postgame-player-money {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.postgame-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.postgame-stat {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.postgame-stat-val {
+  display: block;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.postgame-stat-lbl {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.postgame-moments {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding: 4px 0;
+  line-height: 1.6;
+}
+
+.postgame-divider {
+  color: var(--border-light);
+  margin: 0 4px;
+}
+
+.postgame-dice-section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.postgame-dice-avg {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.postgame-dice-chart {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 36px;
+}
+
+.dice-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.dice-bar-fill {
+  width: 100%;
+  min-height: 1px;
+  border-radius: 2px 2px 0 0;
+  transition: height 0.3s;
+  opacity: 0.7;
+}
+
+.dice-bar-label {
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1;
+}
+
+/* Post-game awards */
+.postgame-awards {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.postgame-award {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(240, 200, 80, 0.06);
+  border: 1px solid rgba(240, 200, 80, 0.15);
+  border-radius: 8px;
+}
+
+.award-icon {
+  font-size: 1.2rem;
+}
+
+.award-text {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.award-text strong {
+  color: var(--gold);
+}
