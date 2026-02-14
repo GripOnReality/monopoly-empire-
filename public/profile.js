@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MONOPOLY EMPIRE — profile.js
+   6SIDES.LIVE — profile.js
    User profile, email connection, stats, and settings
    ═══════════════════════════════════════════════════════════════ */
 
@@ -37,7 +37,7 @@
      LOAD / SAVE
      ────────────────────────────────────── */
   function loadProfile() {
-    var saved = loadSession('richup-profile');
+    var saved = loadSession('6sides-profile');
     if (saved && typeof saved === 'object') {
       profile = {};
       for (var key in defaultProfile) {
@@ -55,7 +55,7 @@
   }
 
   function saveProfile() {
-    saveSession('richup-profile', profile);
+    saveSession('6sides-profile', profile);
   }
 
   /* ──────────────────────────────────────

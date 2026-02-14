@@ -1,4 +1,4 @@
-/* Cyberpunk Token SVGs — Monopoly Empire */
+/* Cyberpunk Token SVGs — 6sides.live */
 var TOKEN_SVGS = {
 
   /* ── 1. Crimson — Cyber Samurai Helmet ────────────────────────── */

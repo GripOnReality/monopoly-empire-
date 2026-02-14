@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MONOPOLY EMPIRE — store.js
+   6SIDES.LIVE — store.js
    In-game store with maps, tokens, themes, effects, and coins
    ═══════════════════════════════════════════════════════════════ */
 
@@ -11,7 +11,7 @@
      ────────────────────────────────────── */
   var STORE_ITEMS = {
     maps: [
-      { id: 'map_classic', name: 'Classic Empire', icon: '🏙️', desc: 'The original Monopoly Empire board', price: 0, tag: '', owned: true },
+      { id: 'map_classic', name: 'Classic Board', icon: '🏙️', desc: 'The original 6sides board', price: 0, tag: '', owned: true },
       { id: 'map_cyberpunk', name: 'Neon District', icon: '🌃', desc: 'Cyberpunk city with neon-lit streets', price: 500, tag: 'popular' },
       { id: 'map_fantasy', name: 'Dragon Kingdom', icon: '🏰', desc: 'Medieval castles and dragon lairs', price: 750, tag: 'new' },
       { id: 'map_space', name: 'Stellar Station', icon: '🚀', desc: 'Trade properties across the galaxy', price: 750, tag: '' },
@@ -64,7 +64,7 @@
 
   // Load from localStorage
   function loadStoreState() {
-    var saved = loadSession('richup-store');
+    var saved = loadSession('6sides-store');
     if (saved) {
       userCoins = typeof saved.coins === 'number' ? saved.coins : 500;
       ownedItems = Array.isArray(saved.owned) ? saved.owned : ['map_classic', 'theme_default', 'fx_confetti'];
@@ -73,7 +73,7 @@
   }
 
   function saveStoreState() {
-    saveSession('richup-store', { coins: userCoins, owned: ownedItems });
+    saveSession('6sides-store', { coins: userCoins, owned: ownedItems });
   }
 
   function updateCoinDisplays() {

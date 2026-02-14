@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MONOPOLY EMPIRE — Turn Timer Module
+   6SIDES.LIVE — Turn Timer Module
    Self-contained timer with visual countdown bar, auto-actions,
    warning flash/sound, auction pause, and server-sync support.
    ═══════════════════════════════════════════════════════════════ */

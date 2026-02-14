@@ -1,5 +1,5 @@
 /* ============================================================
-   Cyberpunk Pattern SVGs — Monopoly Empire
+   Cyberpunk Pattern SVGs — 6sides.live
    Circuit traces, neon glow, glitch textures, data streams
    ============================================================ */
 

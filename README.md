@@ -1,4 +1,4 @@
-# 🎩 Monopoly Empire
+# 🎲 6sides.live
 
 A real-time multiplayer Monopoly board game powered by Node.js, Express, and Socket.IO.
 

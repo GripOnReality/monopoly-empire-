@@ -1,5 +1,5 @@
 {
-  "name": "monopoly-empire",
+  "name": "6sides-live",
   "version": "1.0.0",
   "description": "Real-time multiplayer Monopoly board game using Socket.IO",
   "main": "server/index.js",

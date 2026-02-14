@@ -1,5 +1,5 @@
 /* ============================================================
-   SVG Injection — Cyberpunk Monopoly Empire
+   SVG Injection — Cyberpunk 6sides.live
    Replaces emoji placeholders with cyberpunk SVG icons.
    Runs after all SVG modules (tokens.js, spaces.js, ui.js,
    patterns.js) are loaded.

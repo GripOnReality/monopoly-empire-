@@ -1,5 +1,5 @@
 /**
- * Monopoly Empire — Synthesized Sound Effects (Web Audio API)
+ * 6sides.live — Synthesized Sound Effects (Web Audio API)
  * Usage: SFX.play('dice')  |  SFX.toggle()  |  SFX.enabled
  *        SFX.setVolume(0.5)  |  SFX.getVolume()
  */

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// MONOPOLY EMPIRE — Multiplayer Server
+// 6SIDES.LIVE — Multiplayer Server
 // Express + Socket.IO  •  Room system  •  Chat  •  Reconnection  •  Cleanup
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -773,7 +773,7 @@ setInterval(() => {
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
-  console.log(`\n  ♛  Monopoly Empire server`);
+  console.log(`\n  ♛  6sides.live server`);
   console.log(`     http://localhost:${PORT}`);
   console.log(`     Health:  http://localhost:${PORT}/health`);
   console.log(`     Rooms:   http://localhost:${PORT}/rooms\n`);

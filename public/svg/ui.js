@@ -1,4 +1,4 @@
-/* Cyberpunk UI SVGs — Monopoly Empire */
+/* Cyberpunk UI SVGs — 6sides.live */
 var UI_SVGS = {
 
   /* ── 1. CROWN (64×64) ── Cyberpunk Crown — game logo icon ── */

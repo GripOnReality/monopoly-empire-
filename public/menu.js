@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MONOPOLY EMPIRE — menu.js
+   6SIDES.LIVE — menu.js
    Animated background symbols, navigation, private rooms, quick play
    ═══════════════════════════════════════════════════════════════ */
 
@@ -331,7 +331,7 @@
      ────────────────────────────────────── */
   function showWelcome() {
     setTimeout(function() {
-      var saved = loadSession('richup-profile');
+      var saved = loadSession('6sides-profile');
       var name = (saved && saved.displayName && saved.displayName !== 'Guest Player') ? saved.displayName : null;
 
       if (name) {

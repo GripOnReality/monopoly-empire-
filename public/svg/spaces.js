@@ -1,4 +1,4 @@
-/* Cyberpunk Space SVGs — Monopoly Empire */
+/* Cyberpunk Space SVGs — 6sides.live */
 var SPACE_SVGS = {
 
   /* ── Maglev Monorail Train ─────────────────────────────────── */

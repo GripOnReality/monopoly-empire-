@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MONOPOLY EMPIRE — bot.js
+   6SIDES.LIVE — bot.js
    AI Bot Players Module
    Three difficulty levels: easy, medium, hard
    Runs on HOST client only — host decides for all bots,

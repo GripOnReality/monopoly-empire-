@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MONOPOLY EMPIRE — settings.js
+   6SIDES.LIVE — settings.js
    Game Settings module for the waiting room.
    Host configures; guests see read-only.
    ═══════════════════════════════════════════════════════════════ */

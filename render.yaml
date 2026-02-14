@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: monopoly-empire
+    name: 6sides-live
     runtime: node
     plan: free
     buildCommand: npm install
