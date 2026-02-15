@@ -70,7 +70,15 @@ var CHARACTERS = [
   { id: "purple", color: "#9b59b6", name: "Violet" },
   { id: "teal", color: "#1abc9c", name: "Teal" },
   { id: "pink", color: "#e91e8e", name: "Fuchsia" },
-  { id: "white", color: "#ecf0f1", name: "Ivory" }
+  { id: "white", color: "#ecf0f1", name: "Ivory" },
+  { id: "gold", color: "#FFD700", name: "Diamond" },
+  { id: "scarlet", color: "#FF2244", name: "Club" },
+  { id: "lime", color: "#00ff88", name: "Spade" },
+  { id: "cyan", color: "#00ccff", name: "Heart" },
+  { id: "indigo", color: "#9d4edd", name: "X-Mark" },
+  { id: "magenta", color: "#ff1485", name: "Hexagram" },
+  { id: "bronze", color: "#ff8c00", name: "Square" },
+  { id: "neon", color: "#7fff00", name: "Enigma" }
 ];
 
 function getCharacter(id) {
@@ -1303,7 +1311,12 @@ MonopolyClient.prototype._renderCharacterGrid = function() {
     html += 'opacity:' + ((taken && !selectedByMe) ? '0.4' : '1') + ';';
     html += 'border:3px solid ' + (selectedByMe ? '#f39c12' : (taken ? '#666' : 'rgba(255,255,255,0.2)')) + ';';
     html += 'border-radius:12px;padding:20px;text-align:center;background:rgba(255,255,255,0.05);transition:all 0.2s;">';
-    html += '<div style="width:60px;height:60px;border-radius:50%;background:' + ch.color + ';margin:0 auto 10px;border:3px solid rgba(255,255,255,0.3);box-shadow:0 4px 12px rgba(0,0,0,0.3);"></div>';
+    var _tokenKey = window.CHAR_ID_TO_TOKEN ? window.CHAR_ID_TO_TOKEN[ch.id] : null;
+    if (_tokenKey && window.TOKEN_SVGS && window.TOKEN_SVGS[_tokenKey] && window.getTokenSVG) {
+      html += '<div style="width:60px;height:60px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;">' + window.getTokenSVG(_tokenKey, 56) + '</div>';
+    } else {
+      html += '<div style="width:60px;height:60px;border-radius:50%;background:' + ch.color + ';margin:0 auto 10px;border:3px solid rgba(255,255,255,0.3);box-shadow:0 4px 12px rgba(0,0,0,0.3);"></div>';
+    }
     html += '<div style="font-size:14px;font-weight:600;color:#fff;">' + ch.name + '</div>';
     if (taken && !selectedByMe) {
       var takerName = '';
@@ -2771,7 +2784,12 @@ MonopolyClient.prototype.renderPlayerCards = function() {
     html += '<div class="player-card-header">';
     html += '<div class="player-card-identity">';
     var dotColor = ch ? ch.color : color;
-    html += '<span class="player-card-dot" style="background:' + dotColor + ';"></span>';
+    var _pcTokenKey = (ch && window.CHAR_ID_TO_TOKEN) ? window.CHAR_ID_TO_TOKEN[ch.id] : null;
+    if (_pcTokenKey && window.TOKEN_SVGS && window.TOKEN_SVGS[_pcTokenKey] && window.getTokenSVG) {
+      html += '<span class="player-card-dot" style="background:transparent;border:none;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;">' + window.getTokenSVG(_pcTokenKey, 18) + '</span>';
+    } else {
+      html += '<span class="player-card-dot" style="background:' + dotColor + ';"></span>';
+    }
     html += '<span class="player-card-name" style="color:' + color + ';">' + escHtml(p.name) + '</span>';
     if (isMe) html += '<span class="badge-you">YOU</span>';
     html += '</div>';
@@ -3341,21 +3359,19 @@ MonopolyClient.prototype.animateTokenHop = function(seatIndex, fromPos, toPos, c
   }
   if (path.length === 0) { if (callback) callback(); return; }
 
-  // Create a floating token that hops
-  var ch = getCharacter(player.characterId);
-  var tokenColor = ch ? ch.color : (PLAYER_COLORS[seatIndex] || '#888');
-  var label = (ch && ch.name) ? ch.name.charAt(0).toUpperCase() : String(seatIndex + 1);
-
-  var hopToken = document.createElement('div');
-  hopToken.className = 'board-token hop-token';
-  hopToken.textContent = label;
-  hopToken.style.background = 'linear-gradient(135deg, ' + tokenColor + ' 0%, ' + tokenColor + ' 60%, rgba(0,0,0,0.25) 100%)';
-  hopToken.style.color = (ch && ch.id === 'white') ? '#333' : '#fff';
-  hopToken.style.border = '2px solid rgba(255,255,255,0.85)';
-  hopToken.style.boxShadow = '0 0 10px ' + tokenColor + ', 0 4px 12px rgba(0,0,0,0.6)';
+  // Create a floating token that hops (use SVG token if available)
+  var hopToken = makeToken(seatIndex, player.characterId);
+  hopToken.classList.add('hop-token');
   hopToken.style.position = 'fixed';
   hopToken.style.zIndex = '500';
   hopToken.style.pointerEvents = 'none';
+  var ch = getCharacter(player.characterId);
+  var tokenColor = ch ? ch.color : (PLAYER_COLORS[seatIndex] || '#888');
+  if (hopToken.classList.contains('svg-token')) {
+    hopToken.style.filter = 'drop-shadow(0 0 8px ' + tokenColor + ') drop-shadow(0 2px 6px rgba(0,0,0,0.6))';
+  } else {
+    hopToken.style.boxShadow = '0 0 10px ' + tokenColor + ', 0 4px 12px rgba(0,0,0,0.6)';
+  }
   document.body.appendChild(hopToken);
 
   // Hide the static token for this player during hop
@@ -3378,8 +3394,9 @@ MonopolyClient.prototype.animateTokenHop = function(seatIndex, fromPos, toPos, c
     var spaceEl = document.getElementById('space-' + posNow);
     if (spaceEl) {
       var rect = spaceEl.getBoundingClientRect();
-      hopToken.style.left = (rect.left + rect.width / 2 - 10) + 'px';
-      hopToken.style.top = (rect.top + rect.height / 2 - 10) + 'px';
+      var hopSize = hopToken.offsetWidth || 24;
+      hopToken.style.left = (rect.left + rect.width / 2 - hopSize / 2) + 'px';
+      hopToken.style.top = (rect.top + rect.height / 2 - hopSize / 2) + 'px';
       hopToken.style.transform = 'translateY(-8px) scale(1.2)';
       setTimeout(function() { hopToken.style.transform = 'translateY(0) scale(1)'; }, stepDelay * 0.4);
     }
@@ -3391,8 +3408,9 @@ MonopolyClient.prototype.animateTokenHop = function(seatIndex, fromPos, toPos, c
   var startEl = document.getElementById('space-' + fromPos);
   if (startEl) {
     var startRect = startEl.getBoundingClientRect();
-    hopToken.style.left = (startRect.left + startRect.width / 2 - 10) + 'px';
-    hopToken.style.top = (startRect.top + startRect.height / 2 - 10) + 'px';
+    var startSize = hopToken.offsetWidth || 24;
+    hopToken.style.left = (startRect.left + startRect.width / 2 - startSize / 2) + 'px';
+    hopToken.style.top = (startRect.top + startRect.height / 2 - startSize / 2) + 'px';
   }
   setTimeout(hopStep, stepDelay);
 };

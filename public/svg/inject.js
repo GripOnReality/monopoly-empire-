@@ -21,7 +21,15 @@
     purple: 'violet',
     teal:   'teal',
     pink:   'fuchsia',
-    white:  'ivory'
+    white:  'ivory',
+    gold:     'diamond',
+    scarlet:  'club',
+    lime:     'spade',
+    cyan:     'heart',
+    indigo:   'xmark',
+    magenta:  'hexagram',
+    bronze:   'square',
+    neon:     'question'
   };
 
   /* ----------------------------------------------------------

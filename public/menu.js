@@ -28,7 +28,12 @@
     '🎩', '👑', '💼', '🗝️', '🎪'
   ];
 
-  var SYMBOL_COLORS = ['symbol-gold', 'symbol-blue', 'symbol-green', 'symbol-pink', 'symbol-white'];
+  var SYMBOL_COLORS = [
+    'symbol-crimson', 'symbol-ocean', 'symbol-emerald', 'symbol-amber',
+    'symbol-violet', 'symbol-teal', 'symbol-fuchsia', 'symbol-gold',
+    'symbol-heart', 'symbol-spade', 'symbol-xmark', 'symbol-hexagram',
+    'symbol-square', 'symbol-ivory', 'symbol-question', 'symbol-club'
+  ];
 
   var bgContainer = null;
   var symbolInterval = null;

@@ -302,6 +302,213 @@ var TOKEN_SVGS = {
       '<rect x="25" y="15" width="3" height="1" fill="#e0e8ff" opacity="0.1"/>' +
       '<rect x="18" y="30" width="4" height="0.8" fill="#bdc3c7" opacity="0.1"/>' +
     '</g>' +
+  '</svg>',
+
+  /* ── 9. Diamond — Gold Diamond ──────────────────────────────── */
+  diamond: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="gdi" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="dgr" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#FFE566"/>' +
+        '<stop offset="100%" stop-color="#FF8C00"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#FFD700" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#gdi)">' +
+      '<polygon points="24,7 37,24 24,41 11,24" fill="url(#dgr)" stroke="#FFE566" stroke-width="0.8" opacity="0.9"/>' +
+      '<line x1="24" y1="7" x2="17" y2="24" stroke="#FFFDE0" stroke-width="0.5" opacity="0.5"/>' +
+      '<line x1="24" y1="7" x2="31" y2="24" stroke="#FFFDE0" stroke-width="0.5" opacity="0.5"/>' +
+      '<line x1="11" y1="24" x2="37" y2="24" stroke="#FFFDE0" stroke-width="0.4" opacity="0.4"/>' +
+      '<line x1="24" y1="41" x2="17" y2="24" stroke="#FFFDE0" stroke-width="0.4" opacity="0.3"/>' +
+      '<line x1="24" y1="41" x2="31" y2="24" stroke="#FFFDE0" stroke-width="0.4" opacity="0.3"/>' +
+      '<circle cx="24" cy="7" r="0.8" fill="#00FFFF" opacity="0.8"/>' +
+      '<circle cx="37" cy="24" r="0.8" fill="#00FFFF" opacity="0.8"/>' +
+      '<circle cx="24" cy="41" r="0.8" fill="#00FFFF" opacity="0.8"/>' +
+      '<circle cx="11" cy="24" r="0.8" fill="#00FFFF" opacity="0.8"/>' +
+    '</g>' +
+  '</svg>',
+
+  /* ── 10. Club — Red Club ────────────────────────────────────── */
+  club: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="gcl" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="cgr" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#FF4466"/>' +
+        '<stop offset="100%" stop-color="#990018"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#FF2244" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#gcl)">' +
+      '<circle cx="24" cy="13" r="6.5" fill="url(#cgr)" stroke="#FF4466" stroke-width="0.8"/>' +
+      '<circle cx="15" cy="22" r="6.5" fill="url(#cgr)" stroke="#FF4466" stroke-width="0.8"/>' +
+      '<circle cx="33" cy="22" r="6.5" fill="url(#cgr)" stroke="#FF4466" stroke-width="0.8"/>' +
+      '<path d="M21 27 L21 37 L27 37 L27 27 Z" fill="url(#cgr)" stroke="#FF4466" stroke-width="0.6"/>' +
+      '<path d="M18 36 L30 36 L30 39 L18 39 Z" fill="#111827" stroke="#FF4466" stroke-width="0.5"/>' +
+      '<circle cx="24" cy="13" r="2" fill="#FF6680" opacity="0.5"/>' +
+      '<circle cx="15" cy="22" r="2" fill="#FF6680" opacity="0.5"/>' +
+      '<circle cx="33" cy="22" r="2" fill="#FF6680" opacity="0.5"/>' +
+    '</g>' +
+  '</svg>',
+
+  /* ── 11. Spade — Green Spade ────────────────────────────────── */
+  spade: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="gsp" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="sgr" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#00ff88"/>' +
+        '<stop offset="100%" stop-color="#008844"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#00ff88" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#gsp)">' +
+      '<path d="M24 7 C24 7 36 17 37 25 C38 31 34 35 29 33 C26 32 25 30 24 28 C23 30 22 32 19 33 C14 35 10 31 11 25 C12 17 24 7 24 7 Z" fill="url(#sgr)" stroke="#00ffaa" stroke-width="0.8"/>' +
+      '<path d="M21 33 L21 39 L27 39 L27 33" fill="url(#sgr)" stroke="#00ffaa" stroke-width="0.6"/>' +
+      '<path d="M18 38 L30 38 L30 40 L18 40 Z" fill="#111827" stroke="#00ffaa" stroke-width="0.5"/>' +
+      '<circle cx="24" cy="20" r="1.5" fill="#00ffaa" opacity="0.6"/>' +
+      '<line x1="24" y1="9" x2="24" y2="15" stroke="#66ffcc" stroke-width="0.4" opacity="0.4"/>' +
+    '</g>' +
+  '</svg>',
+
+  /* ── 12. Heart — Blue Heart ─────────────────────────────────── */
+  heart: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="ght" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="hgr" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#00ccff"/>' +
+        '<stop offset="100%" stop-color="#006699"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#00ccff" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#ght)">' +
+      '<path d="M24 38 C24 38 8 27 8 16 C8 10 13 7 18 7 C21 7 24 10 24 10 C24 10 27 7 30 7 C35 7 40 10 40 16 C40 27 24 38 24 38 Z" fill="url(#hgr)" stroke="#00bbff" stroke-width="0.8"/>' +
+      '<path d="M24 14 C24 14 19 9 15 12 C11 16 12 22 24 33" fill="none" stroke="#66ddff" stroke-width="0.5" opacity="0.4"/>' +
+      '<circle cx="24" cy="22" r="1.5" fill="#00ccff" opacity="0.6"/>' +
+      '<circle cx="16" cy="14" r="0.6" fill="#66ddff" opacity="0.5"/>' +
+      '<circle cx="32" cy="14" r="0.6" fill="#66ddff" opacity="0.5"/>' +
+    '</g>' +
+  '</svg>',
+
+  /* ── 13. X-Mark — Purple X ──────────────────────────────────── */
+  xmark: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="gx" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="xgr1" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#c77dff"/>' +
+        '<stop offset="100%" stop-color="#7b2cbf"/>' +
+      '</linearGradient>' +
+      '<linearGradient id="xgr2" x1="1" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="#c77dff"/>' +
+        '<stop offset="100%" stop-color="#7b2cbf"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#9d4edd" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#gx)">' +
+      '<line x1="11" y1="11" x2="37" y2="37" stroke="url(#xgr1)" stroke-width="6" stroke-linecap="round"/>' +
+      '<line x1="11" y1="11" x2="37" y2="37" stroke="#e0aaff" stroke-width="1.5" stroke-linecap="round"/>' +
+      '<line x1="37" y1="11" x2="11" y2="37" stroke="url(#xgr2)" stroke-width="6" stroke-linecap="round"/>' +
+      '<line x1="37" y1="11" x2="11" y2="37" stroke="#e0aaff" stroke-width="1.5" stroke-linecap="round"/>' +
+      '<circle cx="24" cy="24" r="2" fill="#e0aaff" opacity="0.9"/>' +
+      '<circle cx="11" cy="11" r="1.2" fill="#e0aaff" opacity="0.8"/>' +
+      '<circle cx="37" cy="11" r="1.2" fill="#e0aaff" opacity="0.8"/>' +
+      '<circle cx="11" cy="37" r="1.2" fill="#e0aaff" opacity="0.8"/>' +
+      '<circle cx="37" cy="37" r="1.2" fill="#e0aaff" opacity="0.8"/>' +
+    '</g>' +
+  '</svg>',
+
+  /* ── 14. Hexagram — Pink Hexagram ───────────────────────────── */
+  hexagram: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="ghx" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="hxgr" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#ff69b4"/>' +
+        '<stop offset="100%" stop-color="#d90368"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#ff1485" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#ghx)">' +
+      '<polygon points="24,8 35,27 13,27" fill="none" stroke="url(#hxgr)" stroke-width="2.5" stroke-linejoin="round"/>' +
+      '<polygon points="24,40 13,21 35,21" fill="none" stroke="url(#hxgr)" stroke-width="2.5" stroke-linejoin="round"/>' +
+      '<polygon points="24,8 35,27 13,27" fill="none" stroke="#ffb3d9" stroke-width="0.8" stroke-linejoin="round"/>' +
+      '<polygon points="24,40 13,21 35,21" fill="none" stroke="#ffb3d9" stroke-width="0.8" stroke-linejoin="round"/>' +
+      '<circle cx="24" cy="24" r="2" fill="#ffb3d9" opacity="0.9"/>' +
+      '<circle cx="24" cy="8" r="1" fill="#ffb3d9" opacity="0.8"/>' +
+      '<circle cx="24" cy="40" r="1" fill="#ffb3d9" opacity="0.8"/>' +
+      '<circle cx="13" cy="27" r="1" fill="#ffb3d9" opacity="0.8"/>' +
+      '<circle cx="35" cy="27" r="1" fill="#ffb3d9" opacity="0.8"/>' +
+      '<circle cx="13" cy="21" r="1" fill="#ffb3d9" opacity="0.8"/>' +
+      '<circle cx="35" cy="21" r="1" fill="#ffb3d9" opacity="0.8"/>' +
+    '</g>' +
+  '</svg>',
+
+  /* ── 15. Square — Orange Square ─────────────────────────────── */
+  square: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="gsq" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="sqgr" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#ffb366"/>' +
+        '<stop offset="100%" stop-color="#ff4500"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#ff8c00" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#gsq)">' +
+      '<rect x="10" y="10" width="28" height="28" rx="1.5" fill="url(#sqgr)" stroke="#ff8c00" stroke-width="0.8" opacity="0.85"/>' +
+      '<rect x="14" y="14" width="20" height="20" rx="1" fill="none" stroke="#ffcc99" stroke-width="0.7" opacity="0.6"/>' +
+      '<rect x="18" y="18" width="12" height="12" rx="0.5" fill="none" stroke="#ffcc99" stroke-width="0.5" opacity="0.4"/>' +
+      '<circle cx="24" cy="24" r="2" fill="#ffcc99" opacity="0.7"/>' +
+      '<circle cx="10" cy="10" r="1.2" fill="#ffcc99" opacity="0.7"/>' +
+      '<circle cx="38" cy="10" r="1.2" fill="#ffcc99" opacity="0.7"/>' +
+      '<circle cx="10" cy="38" r="1.2" fill="#ffcc99" opacity="0.7"/>' +
+      '<circle cx="38" cy="38" r="1.2" fill="#ffcc99" opacity="0.7"/>' +
+      '<circle cx="24" cy="10" r="0.8" fill="#ffcc99" opacity="0.6"/>' +
+      '<circle cx="38" cy="24" r="0.8" fill="#ffcc99" opacity="0.6"/>' +
+      '<circle cx="24" cy="38" r="0.8" fill="#ffcc99" opacity="0.6"/>' +
+      '<circle cx="10" cy="24" r="0.8" fill="#ffcc99" opacity="0.6"/>' +
+    '</g>' +
+  '</svg>',
+
+  /* ── 16. Question — Neon Question Mark ──────────────────────── */
+  question: '<svg class="token-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs>' +
+      '<filter id="gq" x="-30%" y="-30%" width="160%" height="160%">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>' +
+        '<feComposite in="SourceGraphic" in2="blur" operator="over"/>' +
+      '</filter>' +
+      '<linearGradient id="qgr" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#ccff99"/>' +
+        '<stop offset="100%" stop-color="#39ff14"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<circle cx="24" cy="24" r="22" fill="#0a0e17" stroke="#7fff00" stroke-width="1.2" opacity="0.9"/>' +
+    '<g filter="url(#gq)">' +
+      '<path d="M19 14 Q19 9 24 9 Q32 9 32 16 Q32 21 26 24 L26 28" fill="none" stroke="url(#qgr)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M19 14 Q19 9 24 9 Q32 9 32 16 Q32 21 26 24 L26 28" fill="none" stroke="#ccff99" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="26" cy="35" r="3" fill="url(#qgr)"/>' +
+      '<circle cx="26" cy="35" r="1.2" fill="#ccff99" opacity="0.9"/>' +
+      '<circle cx="19" cy="14" r="0.8" fill="#ccff99" opacity="0.7"/>' +
+      '<circle cx="32" cy="16" r="0.8" fill="#ccff99" opacity="0.7"/>' +
+      '<circle cx="26" cy="24" r="0.8" fill="#ccff99" opacity="0.7"/>' +
+    '</g>' +
   '</svg>'
 };
 
